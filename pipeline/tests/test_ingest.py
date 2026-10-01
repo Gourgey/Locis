@@ -211,3 +211,27 @@ def test_json_array_ndjson_and_zip_extracts(tmp_path):
         z.writestr("part1.json", json.dumps(records[:2]))
         z.writestr("part2.json", json.dumps(records[2:]))
     assert len(list(iter_extract(archive))) == 3
+
+
+def test_default_paths_do_not_depend_on_the_working_directory(tmp_path, monkeypatch):
+    from locis_pipeline.config import load_settings, pipeline_dir
+
+    for name in ("LOCIS_DB", "LOCIS_OUT", "LOCIS_REGION", "LOCIS_FIXTURES_DIR"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.chdir(tmp_path)
+    settings = load_settings()
+    assert settings.db_path == pipeline_dir() / "var" / "locis.sqlite"
+    assert settings.out_dir == pipeline_dir() / "dist"
+    assert settings.region is not None and settings.region[0] < -0.4  # Greater London by default
+
+
+def test_region_setting(monkeypatch):
+    from locis_pipeline.config import load_settings
+
+    monkeypatch.setenv("LOCIS_REGION", "all")
+    assert load_settings().region is None
+    monkeypatch.setenv("LOCIS_REGION", "-0.2,51.4,0.0,51.6")
+    assert load_settings().region == (-0.2, 51.4, 0.0, 51.6)
+    monkeypatch.setenv("LOCIS_REGION", "1,2,3")
+    with pytest.raises(ValueError):
+        load_settings()

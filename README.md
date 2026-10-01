@@ -132,8 +132,8 @@ GitHub repository secrets, enable the scheduled workflow, and set
 | `DTRO_CLIENT_ID`, `DTRO_CLIENT_SECRET` | none | D-TRO consumer application credentials |
 | `DTRO_BASE_URL` | production | `https://dtro-integration.dft.gov.uk/v1` for the test environment |
 | `LOCIS_REGION` | Greater London | `west,south,east,north`, or `all` |
-| `LOCIS_DB` | `var/locis.sqlite` | Pipeline working database |
-| `LOCIS_OUT` | `dist` | Where manifest and tiles are written |
+| `LOCIS_DB` | `pipeline/var/locis.sqlite` | Pipeline working database |
+| `LOCIS_OUT` | `pipeline/dist` | Where manifest and tiles are written |
 | `LOCIS_TILE_ZOOM` | `15` | Tile zoom level |
 | `LOCIS_FIXTURES_DIR` | none | Read records from JSON files instead of the live service |
 | `LOCIS_OFFLINE` | none | Set to `1` to stop the OSTN15 grid download |

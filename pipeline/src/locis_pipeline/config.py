@@ -51,9 +51,16 @@ def _parse_region(text: str | None) -> tuple[float, float, float, float] | None:
     return (parts[0], parts[1], parts[2], parts[3])
 
 
+def pipeline_dir() -> Path:
+    """The pipeline folder of a source checkout, else the current directory."""
+    candidate = Path(__file__).resolve().parents[2]
+    return candidate if (candidate / "pyproject.toml").is_file() else Path.cwd()
+
+
 def load_settings(root: Path | None = None) -> Settings:
-    root = root or Path.cwd()
-    for candidate in (root / ".env", root.parent / ".env"):
+    """Read settings. Defaults do not depend on where the command is run from."""
+    root = root or pipeline_dir()
+    for candidate in (Path.cwd() / ".env", root / ".env", root.parent / ".env"):
         load_dotenv(candidate)
     env = os.environ
     fixtures = env.get("LOCIS_FIXTURES_DIR")

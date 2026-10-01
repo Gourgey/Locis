@@ -62,25 +62,28 @@ def cmd_demo(args, settings: Settings) -> int:
 
 
 def cmd_import(args, settings: Settings) -> int:
+    source = _source(settings)  # fail on missing credentials before touching the store
     store = Store(settings.db_path)
-    report = initial_import(store, _source(settings))
+    report = initial_import(store, source)
     _print(report.as_dict())
     return 1 if report.failed else 0
 
 
 def cmd_sync(args, settings: Settings) -> int:
+    source = _source(settings)
     store = Store(settings.db_path)
-    report = incremental_sync(store, _source(settings))
+    report = incremental_sync(store, source)
     _print(report.as_dict())
     return 1 if report.failed else 0
 
 
 def cmd_update(args, settings: Settings) -> int:
+    source = _source(settings)
     store = Store(settings.db_path)
     if store.get_state(STATE_LAST_SYNC) is None or args.full:
-        report = initial_import(store, _source(settings))
+        report = initial_import(store, source)
     else:
-        report = incremental_sync(store, _source(settings))
+        report = incremental_sync(store, source)
     _print(report.as_dict())
     return 1 if report.failed else 0
 
