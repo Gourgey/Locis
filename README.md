@@ -161,3 +161,12 @@ Parking information is provided as guidance. Always check local signs, road mark
 and temporary restrictions before parking. Published data can be incomplete, late or
 wrong, and many authorities have not published their orders yet. Where the app has
 no data it shows nothing or grey, which never means parking is unrestricted.
+
+## Licence
+
+The code is released under the [MIT License](LICENSE).
+
+That licence covers the code only. Parking data from D-TRO, bank holiday dates from
+GOV.UK, and the Department for Transport example files in
+`pipeline/tests/fixtures/` are Crown copyright and are used under the
+[Open Government Licence v3.0](https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/).
