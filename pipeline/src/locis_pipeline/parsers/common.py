@@ -305,13 +305,12 @@ def normalise_rate_table(raw: Any) -> dict | None:
                 "type": line.get("type"),
                 "value": float(line["value"]) if isinstance(line.get("value"), (int, float)) else None,
             }
-            # Durations are relative to the start of the parking session.
+            # Durations are relative to the start of the parking session. They are
+            # kept exactly as published: a band ending 01:59:59 does not include a
+            # stay of exactly two hours, which belongs to the band starting 02:00:00.
             for src, dst in (("durationStart", "start"), ("durationEnd", "end")):
                 if line.get(src):
-                    seconds = parse_time_of_day_seconds(line[src])
-                    if seconds is not None and dst == "end" and seconds % 60 == 59:
-                        seconds += 1
-                    item[dst] = seconds
+                    item[dst] = parse_time_of_day_seconds(line[src])
             if isinstance(line.get("incrementPeriod"), int):
                 item["increment"] = line["incrementPeriod"] * 60
             for src, dst in (("minValue", "min"), ("maxValue", "max")):

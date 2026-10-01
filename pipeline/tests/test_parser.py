@@ -73,7 +73,7 @@ def test_official_rates_example():
     assert vehicle_set["items"][1] == {"not": {"vehicle": {"type": "caravan"}}}
     assert time_node["time"]["valid"][0]["times"] == [[7 * 3600, 18 * 3600]]
     tiers = time_node["rate"]["collections"][0]["lines"]
-    assert tiers[0]["value"] == 3.2 and tiers[0]["end"] == 7200
+    assert tiers[0]["value"] == 3.2 and tiers[0]["end"] == 7199
     assert time_node["rate"]["collections"][0]["maxTime"] == 11 * 3600
 
 
