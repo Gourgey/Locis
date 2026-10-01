@@ -1,0 +1,19 @@
+// Build configuration for the Locis app. Nothing here is secret.
+//
+// To change the app's name everywhere it is shown, change LOCIS_DISPLAY_NAME.
+
+LOCIS_DISPLAY_NAME = Locis
+
+// Where the app downloads parking data from: the URL of the folder holding
+// manifest.json, published by the data pipeline (see docs/DEPLOYMENT.md).
+// Leave empty to run on the built-in synthetic demo data.
+//
+// xcconfig files treat // as a comment, so write the slashes as /$()/ :
+//   LOCIS_DATA_BASE_URL = https:/$()/example.github.io/locis-data
+LOCIS_DATA_BASE_URL =
+
+// Privacy policy shown in Settings and required for the App Store listing.
+LOCIS_PRIVACY_POLICY_URL =
+
+// Local, uncommitted overrides (optional).
+#include? "Local.xcconfig"

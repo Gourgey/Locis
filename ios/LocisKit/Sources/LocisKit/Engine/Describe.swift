@@ -139,3 +139,68 @@ extension String {
     var capitalizedFirst: String { prefix(1).uppercased() + dropFirst() }
     var lowercasedFirst: String { prefix(1).lowercased() + dropFirst() }
 }
+
+extension Describe {
+    /// Plain-English lines for the "who" conditions of a rule (vehicle, permit,
+    /// badge...), for display. Time conditions are covered by `schedule`.
+    public static func eligibility(_ node: ConditionNode) -> [String] {
+        var lines: [String] = []
+        collect(node, negated: false, into: &lines)
+        var seen = Set<String>()
+        return lines.filter { seen.insert($0).inserted }
+    }
+
+    private static func collect(_ node: ConditionNode, negated: Bool, into lines: inout [String]) {
+        let prefix = negated ? "Does not apply to" : "Applies to"
+        switch node.kind {
+        case .and(let items), .or(let items), .xor(let items):
+            for item in items { collect(item, negated: negated, into: &lines) }
+        case .not(let inner):
+            collect(inner, negated: !negated, into: &lines)
+        case .time:
+            break
+        case .vehicle(let vehicle):
+            var parts: [String] = []
+            if let type = vehicle.type { parts.append(vehicleName(type)) }
+            if let usage = vehicle.usage { parts.append("\(ConditionEvaluator.friendly(usage)) use") }
+            if let extra = vehicle.unsupported, !extra.isEmpty {
+                parts.append("vehicles meeting other limits (\(extra.map(ConditionEvaluator.friendly).joined(separator: ", ")))")
+            }
+            if !parts.isEmpty { lines.append("\(prefix): \(parts.joined(separator: ", "))") }
+        case .permit(let permit):
+            var text = EligibilityNeed.permitName(permit.type)
+            if let scheme = permit.scheme, !scheme.isEmpty { text += " (\(scheme))" }
+            lines.append(negated ? "Exempt: \(text.lowercasedFirst) holders" : "Permit holders: \(text.lowercasedFirst)")
+        case .driver(let kind):
+            let who = kind == "disabledWithPermit" ? "Blue Badge holders" : ConditionEvaluator.friendly(kind) + "s"
+            lines.append("\(prefix): \(who)")
+        case .occupant(let occupant):
+            if occupant.disabled == true { lines.append("\(prefix): Blue Badge holders") }
+            if occupant.hasCount { lines.append("A number-of-occupants condition applies") }
+        case .access(let kinds):
+            lines.append("\(prefix): \(kinds.map(ConditionEvaluator.friendly).joined(separator: ", "))")
+        case .road(let type):
+            lines.append("\(prefix): \(ConditionEvaluator.friendly(type)) roads")
+        case .nonVehicular(let type):
+            lines.append("\(prefix): \(ConditionEvaluator.friendly(type))")
+        case .other(let text):
+            lines.append("Other condition: \(text)")
+        case .unsupported(let why):
+            lines.append("A condition that could not be read (\(why))")
+        }
+    }
+
+    static func vehicleName(_ type: String) -> String {
+        switch type {
+        case "anyVehicle": "all vehicles"
+        case "motorVehicle": "motor vehicles"
+        case "car": "cars"
+        case "motorcycle", "soloMotorcycle": "motorcycles"
+        case "goodsVehicle": "goods vehicles"
+        case "heavyGoodsVehicle": "heavy goods vehicles"
+        case "bus": "buses"
+        case "taxi": "taxis"
+        default: ConditionEvaluator.friendly(type) + "s"
+        }
+    }
+}
