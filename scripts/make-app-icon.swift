@@ -1,46 +1,33 @@
-// Draws the placeholder app icon: a street corner with coloured kerb lines.
-// Usage: swift scripts/make-app-icon.swift <output.png>
+// Renders the app icon and the in-app logo from the artwork in Logo/logo.png.
+// Usage: swift scripts/make-app-icon.swift   (run from the repository root)
+//
+// App Store icons must be 1024 x 1024 with no transparency, so the artwork is
+// drawn onto an opaque canvas filled with its own background colour.
 import AppKit
 import CoreGraphics
 
-let size = 1024
-let space = CGColorSpaceCreateDeviceRGB()
-let context = CGContext(
-    data: nil, width: size, height: size, bitsPerComponent: 8, bytesPerRow: 0, space: space,
-    bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
+let source = URL(fileURLWithPath: "Logo/logo.png")
+guard let image = NSImage(contentsOf: source)?.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+    fatalError("Cannot read \(source.path)")
+}
+guard image.width == image.height else { fatalError("The logo must be square") }
 
-func color(_ hex: UInt32) -> CGColor {
-    CGColor(
-        red: CGFloat((hex >> 16) & 0xFF) / 255, green: CGFloat((hex >> 8) & 0xFF) / 255,
-        blue: CGFloat(hex & 0xFF) / 255, alpha: 1)
+func render(_ size: Int, to path: String) {
+    let context = CGContext(
+        data: nil, width: size, height: size, bitsPerComponent: 8, bytesPerRow: 0,
+        space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
+    // The artwork's background (#27292C), in case of any transparent edge pixels.
+    context.setFillColor(CGColor(red: 0x27 / 255.0, green: 0x29 / 255.0, blue: 0x2C / 255.0, alpha: 1))
+    context.fill(CGRect(x: 0, y: 0, width: size, height: size))
+    context.interpolationQuality = .high
+    context.draw(image, in: CGRect(x: 0, y: 0, width: size, height: size))
+    let data = NSBitmapImageRep(cgImage: context.makeImage()!).representation(using: .png, properties: [:])!
+    try! data.write(to: URL(fileURLWithPath: path))
+    print("wrote \(path) (\(size) px)")
 }
 
-// Background: deep slate.
-context.setFillColor(color(0x18222D))
-context.fill(CGRect(x: 0, y: 0, width: size, height: size))
-
-// Two roads crossing, slightly lighter.
-context.setFillColor(color(0x243445))
-context.fill(CGRect(x: 0, y: 392, width: size, height: 240))
-context.fill(CGRect(x: 392, y: 0, width: 240, height: size))
-
-// Kerb lines in the app's status colours.
-func line(_ hex: UInt32, _ from: CGPoint, _ to: CGPoint) {
-    context.setStrokeColor(color(hex))
-    context.setLineWidth(46)
-    context.setLineCap(.round)
-    context.move(to: from)
-    context.addLine(to: to)
-    context.strokePath()
+let assets = "ios/Locis/Resources/Assets.xcassets"
+render(1024, to: "\(assets)/AppIcon.appiconset/AppIcon.png")
+for (scale, pixels) in [(1, 72), (2, 144), (3, 216)] {
+    render(pixels, to: "\(assets)/Logo.imageset/logo@\(scale)x.png")
 }
-line(0x30D158, CGPoint(x: 96, y: 660), CGPoint(x: 340, y: 660))   // free
-line(0x40C8E0, CGPoint(x: 684, y: 660), CGPoint(x: 928, y: 660))  // paid
-line(0xFFB340, CGPoint(x: 96, y: 364), CGPoint(x: 340, y: 364))   // conditional
-line(0xFF6961, CGPoint(x: 684, y: 364), CGPoint(x: 928, y: 364))  // not allowed
-line(0xBF8CFF, CGPoint(x: 364, y: 720), CGPoint(x: 364, y: 928))  // reserved
-line(0xA0A6B2, CGPoint(x: 660, y: 96), CGPoint(x: 660, y: 304))   // unknown
-
-let image = context.makeImage()!
-let rep = NSBitmapImageRep(cgImage: image)
-let data = rep.representation(using: .png, properties: [:])!
-try! data.write(to: URL(fileURLWithPath: CommandLine.arguments[1]))

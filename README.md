@@ -147,8 +147,6 @@ The database schema is created and upgraded automatically by versioned migration
 - **A place to publish the data**: the provided workflow uses GitHub Pages.
 - **A privacy policy URL** for the App Store listing: `LOCIS_PRIVACY_POLICY_URL`
   in `ios/Config/Locis.xcconfig`.
-- **A final app icon**: the current one is a placeholder
-  (`scripts/make-app-icon.swift`).
 
 ## Renaming the app
 
@@ -166,7 +164,14 @@ no data it shows nothing or grey, which never means parking is unrestricted.
 
 The code is released under the [MIT License](LICENSE).
 
-That licence covers the code only. Parking data from D-TRO, bank holiday dates from
+That licence covers the code only. The Locis name and logo (`Logo/`, the app icon and
+the in-app logo) are not covered by it and remain the property of Curated Design
+Limited.
+
+To regenerate the app icon after changing `Logo/logo.png`, run
+`swift scripts/make-app-icon.swift` from the repository root.
+
+The MIT licence also does not cover the data: parking data from D-TRO, bank holiday dates from
 GOV.UK, and the Department for Transport example files in
 `pipeline/tests/fixtures/` are Crown copyright and are used under the
 [Open Government Licence v3.0](https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/).

@@ -66,6 +66,18 @@ struct AboutScreen: View {
         let state = app.map.manifestState
         Form {
             Section {
+                HStack(spacing: 14) {
+                    Image("Logo")
+                        .resizable()
+                        .frame(width: 60, height: 60)
+                        .clipShape(.rect(cornerRadius: 14))
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(AppConfiguration.appName).font(.title2.weight(.semibold))
+                        Text("Version \(AppConfiguration.version)").font(.subheadline).foregroundStyle(.secondary)
+                    }
+                }
+                .accessibilityElement(children: .combine)
                 Text(
                     "\(AppConfiguration.appName) shows whether you may legally park on a section of kerb for the whole of the time you choose. It does not know whether a space is empty."
                 )
@@ -124,10 +136,6 @@ struct AboutScreen: View {
                 if let policy = AppConfiguration.privacyPolicyURL {
                     Link("Privacy policy", destination: policy)
                 }
-            }
-
-            Section {
-                LabeledContent("Version", value: AppConfiguration.version)
             }
         }
         .navigationTitle("About")

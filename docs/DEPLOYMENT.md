@@ -96,7 +96,6 @@ Still to do before submitting:
 | Item | Where |
 |---|---|
 | Privacy policy URL | `LOCIS_PRIVACY_POLICY_URL` in the xcconfig, and App Store Connect |
-| Final app icon | Replace `AppIcon.png` (1024 x 1024, no transparency) |
 | Live data URL | `LOCIS_DATA_BASE_URL`; do not ship a demo-only build |
 | App Privacy answers | "Data Not Collected" matches the app as built |
 | Category, screenshots, description | App Store Connect. The description should say the app gives guidance and does not show free spaces |
