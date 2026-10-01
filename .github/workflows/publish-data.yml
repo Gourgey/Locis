@@ -26,20 +26,41 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.credentials.outputs.ready }}
     steps:
+      # Until the D-TRO credentials are added as secrets there is nothing to do:
+      # finish quietly instead of failing every day.
+      - name: Check for D-TRO credentials
+        id: credentials
+        env:
+          DTRO_CLIENT_ID: ${{ secrets.DTRO_CLIENT_ID }}
+          DTRO_CLIENT_SECRET: ${{ secrets.DTRO_CLIENT_SECRET }}
+        run: |
+          if [ -n "$DTRO_CLIENT_ID" ] && [ -n "$DTRO_CLIENT_SECRET" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No D-TRO credentials yet. Add the DTRO_CLIENT_ID and DTRO_CLIENT_SECRET secrets (docs/DEPLOYMENT.md)."
+          fi
+
       - uses: actions/checkout@v4
+        if: steps.credentials.outputs.ready == 'true'
 
       - uses: actions/setup-python@v5
+        if: steps.credentials.outputs.ready == 'true'
         with:
           python-version: "3.13"
 
       - name: Install the pipeline
+        if: steps.credentials.outputs.ready == 'true'
         run: pip install ./pipeline
 
       # The working database (raw D-TRO payloads and the sync checkpoint) is kept
       # between runs so most days only changes are fetched. If the cache is gone,
       # the pipeline runs a full import instead.
       - name: Restore working database
+        if: steps.credentials.outputs.ready == 'true'
         uses: actions/cache@v4
         with:
           path: pipeline/var
@@ -47,16 +68,13 @@ jobs:
           restore-keys: locis-db-
 
       - name: Update data and build tiles
+        if: steps.credentials.outputs.ready == 'true'
         env:
           DTRO_CLIENT_ID: ${{ secrets.DTRO_CLIENT_ID }}
           DTRO_CLIENT_SECRET: ${{ secrets.DTRO_CLIENT_SECRET }}
           LOCIS_DB: pipeline/var/locis.sqlite
           LOCIS_OUT: pipeline/dist
         run: |
-          if [ -z "$DTRO_CLIENT_ID" ] || [ -z "$DTRO_CLIENT_SECRET" ]; then
-            echo "::error::Add the DTRO_CLIENT_ID and DTRO_CLIENT_SECRET repository secrets (docs/DEPLOYMENT.md)."
-            exit 1
-          fi
           # A full import every Sunday reconciles anything the event feed missed.
           if [ "${{ inputs.full }}" = "true" ] || [ "$(date -u +%u)" = "7" ]; then
             locis publish --full
@@ -75,11 +93,13 @@ jobs:
         run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/publish-data.yml/enable"
 
       - uses: actions/upload-pages-artifact@v3
+        if: steps.credentials.outputs.ready == 'true'
         with:
           path: pipeline/dist
 
   deploy:
     needs: build
+    if: needs.build.outputs.ready == 'true'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
