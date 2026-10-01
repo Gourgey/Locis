@@ -86,8 +86,11 @@ struct CostTests {
     @Test func unsupportedTariffsAreNotPriced() {
         let euros = rate(["collections": [["currency": "EUR", "lines": [["seq": 1, "type": "flatRate", "value": 6]]]]])
         #expect(cost(euros, hours: 1) == nil)
-        let noIncrement = rate(["collections": [["currency": "GBP", "lines": [["seq": 1, "type": "perUnit", "value": 2]]]]])
+        let noIncrement = rate(["collections": [["currency": "GBP", "lines": [["seq": 1, "type": "incrementingRate", "value": 2]]]]])
         #expect(cost(noIncrement, hours: 1) == nil)
+        // "perUnit" does not say what the unit is.
+        let perUnit = rate(["collections": [["currency": "GBP", "lines": [["seq": 1, "type": "perUnit", "increment": 900, "value": 2]]]]])
+        #expect(cost(perUnit, hours: 1) == nil)
         let mixed = rate([
             "collections": [
                 [
@@ -110,6 +113,36 @@ struct CostTests {
             ]
         ])
         #expect(cost(two, hours: 1) == nil)
+    }
+
+    @Test func tariffThatResetsOrEndsDuringTheStayIsNotPriced() {
+        var json = perQuarterHour(1.0)
+        var collection = (json["collections"] as! [JSON])[0]
+        collection["resetTime"] = 12 * 3600
+        json["collections"] = [collection]
+        let resets = rate(json)
+        #expect(cost(resets, hours: 1, from: "2026-10-05 10:00")?.amount == 4)
+        #expect(cost(resets, hours: 3, from: "2026-10-05 10:00") == nil)  // crosses 12:00
+
+        collection["resetTime"] = nil
+        collection["to"] = "2026-10-05T10:30:00Z"  // 11:30 in London
+        json["collections"] = [collection]
+        let ends = rate(json)
+        #expect(cost(ends, hours: 1, from: "2026-10-05 10:00")?.amount == 4)
+        #expect(cost(ends, hours: 2, from: "2026-10-05 10:00") == nil)
+    }
+
+    @Test func lineLimitedToABandOnlyPricesStaysInsideIt() {
+        var json = perQuarterHour(1.0)
+        var collection = (json["collections"] as! [JSON])[0]
+        var line = (collection["lines"] as! [JSON])[0]
+        line["start"] = 0
+        line["end"] = 7200
+        collection["lines"] = [line]
+        json["collections"] = [collection]
+        let banded = rate(json)
+        #expect(cost(banded, hours: 2)?.amount == 8)
+        #expect(cost(banded, hours: 3) == nil)
     }
 
     @Test func twoDifferentTariffsAtOnceAreNotPriced() {

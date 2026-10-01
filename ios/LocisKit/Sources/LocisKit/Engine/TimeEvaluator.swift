@@ -59,6 +59,12 @@ struct TimeEvaluator: Sendable {
         return Tri.and(valid, excepted.negated)
     }
 
+    /// Whether the instant lies within the validity's overall start...end dates,
+    /// ignoring its recurring periods.
+    func isWithinDates(_ validity: TimeValidity, at instant: Date) -> Bool {
+        instant >= validity.start && (validity.end.map { instant < $0 } ?? true)
+    }
+
     /// The valid periods in force at an instant (used for stay limits).
     func activePeriods(_ validity: TimeValidity, at instant: Date) -> [Period] {
         (validity.valid ?? []).filter { matches($0, at: instant) == .yes }
@@ -78,9 +84,16 @@ struct TimeEvaluator: Sendable {
         var windowDays: [LondonCalendar.LocalDay] = []
         if let windows = period.times, !windows.isEmpty {
             let seconds = calendar.secondsOfDay(instant)
-            for window in windows where window.count == 2 {
+            for window in windows {
+                // A window the engine cannot read must not silently mean "never".
+                guard window.count == 2, (0...86400).contains(window[0]), (0...86400).contains(window[1]) else {
+                    return .unknown("a time of day that cannot be read")
+                }
                 let (start, end) = (window[0], window[1])
                 if start == end {
+                    // 00:00-00:00 is the whole day. Any other equal pair could mean
+                    // all day or no time at all, so it is not guessed.
+                    guard start == 0 else { return .unknown("a time window that starts and ends at the same time") }
                     windowDays.append(today)
                 } else if start < end {
                     if seconds >= start && seconds < end { windowDays.append(today) }
@@ -92,6 +105,9 @@ struct TimeEvaluator: Sendable {
             if windowDays.isEmpty { return .no }
         } else {
             windowDays = [today]
+        }
+        if let rules = period.days, rules.isEmpty {
+            return .unknown("day rules that cannot be read")
         }
         return windowDays.reduce(Tri.no) { Tri.or($0, dayMatches(period, $1)) }
     }

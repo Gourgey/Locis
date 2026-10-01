@@ -85,7 +85,12 @@ Two kinds of "not applying" are kept apart:
 - **inactive**: a current order outside its hours (a single yellow line at night);
 - **absent**: not yet in force, ended, or outside its validity dates. An absent
   provision takes no part at all. An expired temporary order must not read as
-  "restriction lifted, so parking is fine".
+  "restriction lifted, so parking is fine". This is decided by evaluating the
+  condition tree with each time condition reduced to its start and end dates.
+
+Things the engine cannot read are unknown, never "does not apply": a malformed time
+window, an empty list of day rules, an empty condition set, or a vehicle-use value
+it has not heard of.
 
 Some eligibility comes from the kind of bay, whatever the conditions say: disabled
 bays need a Blue Badge, motorcycle bays a motorcycle, loading bays, taxi ranks and
@@ -98,7 +103,10 @@ still needs a permit.
 `related` list, in this order:
 
 1. **Overrides.** A temporary provision, or a suspension of a restriction, removes
-   the provisions it names in `overrides` for as long as it is active.
+   the provisions it names in `overrides`, but only while it is in force and bears
+   on this user. One that exempts the user, or is only planned, removes nothing.
+   A parking place recorded as an area is also set aside here: it cannot grant
+   parking on a particular kerb. (A restriction recorded as an area still applies.)
 2. **Prohibitions.** Any provision that prohibits makes the segment prohibited. A
    parking place never hides a no-waiting or no-stopping rule.
 3. **Suspensions.** An active bay suspension makes the segment prohibited when there
@@ -109,12 +117,18 @@ still needs a permit.
      ordinary bays; conditional for specialist bays ("check the sign").
    - None in force, only an inactive restriction: allowed free ("restriction not in
      force").
+   - None in force, and a restriction that is in force for others but exempts this
+     user: conditional. Exemptions are a known source of publishing mistakes (DfT's
+     own guidance says so), and nothing positively allows parking.
    - Nothing about waiting at all (for example only a loading restriction): unknown.
    - Specialist and ordinary bays both in force, or two kinds of specialist bay:
      unknown. The source does not say which wins.
    - Otherwise parking places are grants. Any that applies is enough (a shared-use
-     permit/paid bay is allowed, paid); a free grant is preferred; stay limits are
-     the tightest of the grants in force.
+     permit/paid bay is allowed, paid). Where several apply and disagree, the more
+     demanding reading is taken: paid if any is paid, the tightest stay limits, and
+     no price is quoted. Two records for one bay often mean an older order and its
+     amendment.
+   - A limited-waiting bay with no limit in the data is conditional.
 6. An eligibility question raised by a restriction (permit-holder exemption, planned
    order) turns an allowed result into conditional.
 
@@ -138,9 +152,12 @@ free.
 `CostCalculator` prices only structures with one reading:
 
 - exactly one rate collection valid at the start, in GBP;
-- one `incrementingRate` or `perUnit` line with an increment (rounded up to whole
-  units); or bands of `flatRateTier` where exactly one band contains the stay; or
-  one `flatRate` for a stay within a single day;
+- one `incrementingRate` line with an increment (rounded up to whole units); or
+  bands of `flatRateTier` where exactly one band contains the stay; or one
+  `flatRate` for a stay within a single day. `perUnit` is not priced because the
+  data model does not say what the unit is;
+- the stay lies inside any band the line is limited to, and does not cross the
+  tariff's reset time or its end date;
 - minimum and maximum charges applied;
 - a single, contiguous charged period under a single tariff.
 

@@ -155,6 +155,12 @@ parser fix does not need a new download.
   `locis inspect-extract` on the first real download and adjust if needed.
 - **Coverage unknown** until measured with credentials.
 - **Revocations are not linked** to what they revoke; the kerb goes unknown instead.
+- **Amendments are not linked** to what they amend. If an authority publishes an
+  amendment as a new record and leaves the old one in place, both are read. The
+  engine then takes the more demanding of the two (see RULES_ENGINE.md), which is
+  safe but can be stricter than the street.
+- **Rules recorded as a point, or as a line standing for a zone,** are not applied
+  to nearby kerb lines: there is no reliable way to say which kerb they cover.
 - **Partial overlaps are applied to the whole feature.** A restriction covering part
   of a bay marks the whole bay. Conservative, and flagged in the details.
 - **Not interpreted, so shown as unknown:** week-of-month rules, dawn/dusk and

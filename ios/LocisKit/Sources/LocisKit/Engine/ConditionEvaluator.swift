@@ -58,6 +58,7 @@ enum Applicability: Equatable, Sendable {
     }
 
     static func all(_ items: [Applicability]) -> Applicability {
+        if items.isEmpty { return .unsupported(["an empty set of conditions"]) }
         if items.contains(.no) { return .no }
         if let merged = mergedUnsupported(items) { return merged }
         if let merged = mergedEligibility(items) { return merged }
@@ -66,6 +67,7 @@ enum Applicability: Equatable, Sendable {
     }
 
     static func any(_ items: [Applicability]) -> Applicability {
+        if items.isEmpty { return .unsupported(["an empty set of conditions"]) }
         if items.contains(.yes) { return .yes }
         if let merged = mergedUnsupported(items) { return merged }
         if let merged = mergedEligibility(items) { return merged }
@@ -74,6 +76,7 @@ enum Applicability: Equatable, Sendable {
     }
 
     static func exactlyOne(_ items: [Applicability]) -> Applicability {
+        if items.isEmpty { return .unsupported(["an empty set of conditions"]) }
         if let merged = mergedUnsupported(items) { return merged }
         if let merged = mergedEligibility(items) { return merged }
         if items.contains(.someUsers) { return .someUsers }
@@ -101,6 +104,9 @@ struct ConditionEvaluator: Sendable {
         /// "Is the regulation in force for anybody at this time?": every condition
         /// about who the road user is counts as "some users".
         case anyone
+        /// "Does the order exist at this date?": like `anyone`, but a time condition
+        /// only tests its overall start...end dates, not its hours or days.
+        case anyoneByDatesOnly
     }
 
     let time: TimeEvaluator
@@ -116,6 +122,11 @@ struct ConditionEvaluator: Sendable {
         case .not(let inner):
             return evaluate(inner, at: instant, subject: subject).negated
         case .time(let validity):
+            if case .anyoneByDatesOnly = subject {
+                // Inside its dates the condition may or may not hold (that depends
+                // on hours and days); outside them it certainly does not.
+                return time.isWithinDates(validity, at: instant) ? .someUsers : .no
+            }
             switch time.isActive(validity, at: instant) {
             case .yes: return .yes
             case .no: return .no
@@ -181,12 +192,16 @@ struct ConditionEvaluator: Sendable {
 
     /// The user is assumed to be a private motorist on ordinary business.
     static func matches(vehicleUsage usage: String) -> Applicability {
-        switch usage {
-        case "access", "accessToOffStreetPremises", "other":
-            return .unsupported(["a vehicle-use condition (\(friendly(usage)))"])
-        default:
-            return .no  // emergency, bus operation, military, private hire, authorised vehicles...
-        }
+        // Uses a private motorist certainly is not engaged in.
+        let official: Set<String> = [
+            "authorisedVehicles", "busOperationPurpose", "coastguardVehicle", "dialARide", "diplomaticVehicle",
+            "emergencyAndIncidentSupportVehicle", "emergencyServicesVehicle", "fireServiceVehicle", "guidedBuses",
+            "highwayAuthorityPurpose", "localBuses", "locallyRegisteredPrivateHireVehicle", "military",
+            "policeVehicle", "privateHireVehicle", "publicServiceVehicle", "schoolBus", "statutoryUndertakerPurpose",
+        ]
+        if official.contains(usage) { return .no }
+        // Access, "other", and any use this version has not heard of.
+        return .unsupported(["a vehicle-use condition (\(friendly(usage)))"])
     }
 
     private func permit(_ condition: PermitCondition, _ profile: VehicleProfile) -> Applicability {

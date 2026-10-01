@@ -88,11 +88,19 @@ public struct ParkingRulesEngine: Sendable {
         // 1. A temporary provision, or a suspension of a restriction, replaces the
         //    provisions it names for as long as it is itself active.
         var overridden = Set<String>()
-        for snapshot in input where snapshot.effect.isActive || snapshot.effect == .liftsRestrictions {
+        for snapshot in input where snapshot.effect.governsUser && snapshot.feature.lifecycle != .intended {
             overridden.formUnion(snapshot.feature.overrides ?? [])
         }
-        // Provisions that do not exist at this time take no part at all.
-        let snapshots = input.filter { !overridden.contains($0.feature.prov) && $0.effect != .absent }
+        // Provisions that do not exist at this time take no part at all. Nor does
+        // a parking place recorded only as an area: it cannot grant parking on a
+        // particular kerb (a restriction recorded as an area still applies).
+        let snapshots = input.filter { snapshot in
+            if overridden.contains(snapshot.feature.prov) || snapshot.effect == .absent { return false }
+            let isAreaGrant =
+                snapshot.feature.role == .permission && snapshot.feature.geomQuality != .kerb
+                && snapshot.feature.geomQuality != .centreline
+            return !(isAreaGrant && snapshot.feature.id != primary.id)
+        }
         let partialIDs = Set(primary.partial ?? [])
 
         func ids(_ matching: (Snapshot) -> Bool) -> [String] {
@@ -150,12 +158,21 @@ public struct ParkingRulesEngine: Sendable {
                         deciding: permissions.map(\.feature.id), inferred: true)
                 }
             } else if snapshots.contains(where: { $0.feature.role == .prohibition && $0.feature.lifecycle != .intended }) {
-                // A recorded restriction that is not in force now (single yellow at night).
-                let exempt = snapshots.contains { $0.effect == .notAffected }
-                outcome = SegmentOutcome(
-                    status: .allowedFree,
-                    note: exempt ? "The restriction here does not apply to you" : "Restriction not in force",
-                    deciding: ids { $0.feature.role == .prohibition }, inferred: true)
+                if snapshots.contains(where: { $0.effect == .notAffected }) {
+                    // A restriction is in force for other road users and the data
+                    // says it exempts this one. Exemptions are a known source of
+                    // publishing mistakes, and nothing positively allows parking
+                    // here, so this is not shown as available.
+                    outcome = SegmentOutcome(
+                        status: .conditional,
+                        note: "A restriction is in force here. The published data says it does not apply to you; check the sign",
+                        deciding: ids { $0.effect == .notAffected })
+                } else {
+                    // A recorded restriction that is not in force now (single yellow at night).
+                    outcome = SegmentOutcome(
+                        status: .allowedFree, note: "Restriction not in force",
+                        deciding: ids { $0.feature.role == .prohibition }, inferred: true)
+                }
             } else {
                 outcome = SegmentOutcome(
                     status: .unknown, note: "Cannot be determined",
@@ -181,18 +198,18 @@ public struct ParkingRulesEngine: Sendable {
             for case .needs(let more) in group.map(\.effect) { needs.formUnion(more) }
 
             if !permitting.isEmpty {
-                // Parking places are grants: any one that applies is enough. Prefer a
-                // free grant; limits are taken from every grant in force (the tightest).
-                let free = permitting.filter { !$0.isPaid }
-                let used = free.isEmpty ? permitting : free
-                outcome = SegmentOutcome(status: free.isEmpty ? .allowedPaid : .allowedFree)
-                outcome.paid = free.isEmpty
-                outcome.note = free.isEmpty ? "Paid parking" : "Parking permitted"
-                outcome.deciding = used.map(\.feature.id)
+                // Parking places are grants: any one that applies is enough. Where
+                // several apply and they disagree, the more demanding reading is
+                // taken: paid if any is paid, and the tightest stay limits. (Two
+                // records for one bay often mean an older order and its amendment.)
+                let paid = permitting.contains(where: \.isPaid)
+                outcome = SegmentOutcome(status: paid ? .allowedPaid : .allowedFree)
+                outcome.paid = paid
+                outcome.note = paid ? "Paid parking" : "Parking permitted"
+                outcome.deciding = permitting.map(\.feature.id)
                 for snapshot in permitting { outcome.limits.tighten(with: snapshot.limits) }
-                if outcome.paid {
-                    let tariffs = used.filter { $0.rate != nil }
-                    if used.count == 1, let only = tariffs.first, !only.rateUnusable {
+                if paid {
+                    if permitting.count == 1, let only = permitting.first, only.rate != nil, !only.rateUnusable {
                         outcome.rateSource = only.feature.id
                         outcome.rate = only.rate
                     } else {
@@ -202,6 +219,12 @@ public struct ParkingRulesEngine: Sendable {
                 if permitting.contains(where: \.limitsUnreadable) {
                     outcome.status = .conditional
                     outcome.note = "A stay limit applies here but could not be read. Check the sign"
+                } else if outcome.limits.maxStay == nil,
+                    permitting.contains(where: { $0.feature.cat == .limitedWaiting })
+                {
+                    // "Limited waiting" with no limit in the data: the key fact is missing.
+                    outcome.status = .conditional
+                    outcome.note = "Waiting is limited here but the time limit is not recorded. Check the sign"
                 }
                 outcome.shared = group.count > 1
             } else if !needs.isEmpty {

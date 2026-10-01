@@ -20,6 +20,14 @@ enum CostCalculator {
         }
         guard current.count == 1, let collection = current.first else { return nil }
         guard collection.currency == "GBP" else { return nil }
+        // A tariff that ends, or resets, part-way through the session has no single reading.
+        if let to = collection.to, sessionEnd > to { return nil }
+        if let reset = collection.resetTime {
+            for day in calendar.days(covering: DateInterval(start: sessionStart, end: sessionEnd)) {
+                let instant = calendar.date(day, secondsOfDay: reset)
+                if instant > sessionStart && instant < sessionEnd { return nil }
+            }
+        }
         if let maxTime = collection.maxTime, chargeableSeconds > maxTime { return nil }
         let billable = max(chargeableSeconds, collection.minTime ?? 0)
         let lines = collection.lines.sorted { ($0.seq ?? 0) < ($1.seq ?? 0) }
@@ -36,8 +44,12 @@ enum CostCalculator {
             guard matching.count == 1, let value = matching[0].value else { return nil }
             amount = clamp(value, matching[0])
         } else if lines.count == 1, let line = lines.first, let value = line.value {
+            // A line limited to a band of session lengths only prices stays inside it.
+            if let start = line.start, billable < start { return nil }
+            if let end = line.end, billable > end { return nil }
             switch line.type {
-            case "incrementingRate", "perUnit":
+            case "incrementingRate":
+                // "perUnit" is not priced: the data model does not say what the unit is.
                 guard let increment = line.increment, increment > 0 else { return nil }
                 let units = (billable + increment - 1) / increment
                 amount = clamp(value * Decimal(units), line)

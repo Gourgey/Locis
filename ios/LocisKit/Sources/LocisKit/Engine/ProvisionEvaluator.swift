@@ -33,6 +33,16 @@ enum Effect: Equatable, Sendable {
         default: true
         }
     }
+
+    /// Whether the provision is in force and bears on this user, so that it can
+    /// stand in for a provision it overrides. One that exempts the user must not
+    /// wipe out the rule it replaces.
+    var governsUser: Bool {
+        switch self {
+        case .absent, .inactive, .info, .notAffected: false
+        default: true
+        }
+    }
 }
 
 /// One provision's state at one instant.
@@ -175,16 +185,12 @@ struct ProvisionEvaluator: Sendable {
         return true
     }
 
-    /// False when every time condition's start...end range excludes the instant:
-    /// the order has expired or has not started, as opposed to being outside its
-    /// daily hours.
+    /// False when the order's validity dates rule the instant out: it has expired
+    /// or not started, as opposed to being outside its daily hours. The condition
+    /// tree is evaluated with every time condition reduced to its start...end
+    /// dates, so ANDed and ORed time conditions are combined correctly.
     private func isWithinValidityDates(_ feature: Feature, at instant: Date) -> Bool {
-        var sawTime = false
-        for case .time(let validity) in feature.cond.allNodes.map(\.kind) {
-            sawTime = true
-            if instant >= validity.start, validity.end.map({ instant < $0 }) ?? true { return true }
-        }
-        return !sawTime
+        conditions.evaluate(feature.cond, at: instant, subject: .anyoneByDatesOnly) != .no
     }
 
     /// Orders with recorded on-street start/stop events are in force only between them.

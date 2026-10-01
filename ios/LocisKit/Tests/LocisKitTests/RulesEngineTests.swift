@@ -183,6 +183,13 @@ struct LimitsAndPaymentTests {
         #expect(result.costNote == CostCalculator.unavailable)
     }
 
+    @Test func limitedWaitingWithoutARecordedLimitIsNotConfirmed() {
+        let noLimit = feature(reg: "kerbsideLimitedWaiting", cat: "limitedWaiting", cond: time([period(monSat, [("08:00", "18:00")])]))
+        #expect(evaluate(noLimit, stay("2026-10-05 10:00", "2026-10-05 11:00")).status == .conditional)
+        // Outside its hours the limit is not in question.
+        #expect(evaluate(noLimit, stay("2026-10-05 19:00", "2026-10-05 20:00")).status == .allowedFree)
+    }
+
     @Test func unreadableStayLimitIsNotConfirmed() {
         let unreadable = feature(
             reg: "kerbsideLimitedWaiting", cat: "limitedWaiting",
@@ -280,10 +287,28 @@ struct EligibilityTests {
         let restriction = noWaiting(cond: allOf(always, not(vehicle("motorcycle"))))
         let period = stay("2026-10-05 10:00", "2026-10-05 11:00")
         #expect(evaluate(restriction, period).status == .prohibited)
+        // The data exempts the rider, but an exemption with nothing positively
+        // allowing parking is not shown as available.
         let rider = evaluate(restriction, period, profile: VehicleProfile(vehicleType: .motorcycle))
-        #expect(rider.status == .allowedFree)
-        #expect(rider.reasons.first == "The restriction here does not apply to you")
-        #expect(rider.confidence == .medium)
+        #expect(rider.status == .conditional)
+        #expect(rider.reasons.first?.contains("does not apply to you") == true)
+    }
+
+    @Test func exemptionFromARestrictionOnABayLeavesTheBayUsable() {
+        // A paid bay with a restriction that applies to goods vehicles only.
+        let paid = paidBay(cond: time([period(monSat, [("08:30", "18:30")])], rate: perQuarterHour(1.0)))
+        let goodsOnly = noWaiting("goods", cond: allOf(always, vehicle("goodsVehicle")))
+        let period = stay("2026-10-05 10:00", "2026-10-05 11:00")
+        #expect(evaluate(paid, with: [goodsOnly], period).status == .allowedPaid)
+        #expect(evaluate(paid, with: [goodsOnly], period, profile: VehicleProfile(vehicleType: .van)).status == .prohibited)
+    }
+
+    @Test func unknownVehicleUseIsNotAssumedToExcludeTheUser() {
+        let restriction = noWaiting(cond: allOf(always, ["vehicle": ["usage": "somethingNewInV5"]]))
+        let period = stay("2026-10-05 10:00", "2026-10-05 11:00")
+        #expect(evaluate(restriction, period).status == .unknown)
+        let police = noWaiting(cond: allOf(always, ["vehicle": ["usage": "policeVehicle"]]))
+        #expect(evaluate(police, period).status == .conditional)
     }
 
     @Test func prohibitionExceptPermitHoldersIsConditional() {
@@ -405,6 +430,61 @@ struct OverlapTests {
         #expect(evaluate(yellow, with: [unnamed], period).status == .prohibited)
     }
 
+    @Test func temporaryOrderThatExemptsTheUserDoesNotWipeOutTheBay() {
+        // A temporary restriction on goods vehicles names the paid bay it overrides.
+        // For a car it must not turn the paid bay into free parking.
+        let temporary = noWaiting(
+            "temp", cond: allOf(time(start: "2026-10-01T00:00:00Z"), vehicle("goodsVehicle")),
+            ["temporary": true, "overrides": [paid.prov]])
+        let period = stay("2026-10-05 10:00", "2026-10-05 11:00")
+        #expect(evaluate(paid, with: [temporary], period).status == .allowedPaid)
+        #expect(evaluate(paid, with: [temporary], period, profile: VehicleProfile(vehicleType: .van)).status == .prohibited)
+    }
+
+    @Test func plannedOrderDoesNotOverrideAnything() {
+        let planned = noWaiting(
+            "planned", cond: time(start: "2026-10-01T00:00:00Z"),
+            ["lifecycle": "intended", "temporary": true, "overrides": [paid.prov]])
+        let result = evaluate(paid, with: [planned], stay("2026-10-05 10:00", "2026-10-05 11:00"))
+        #expect(result.status == .conditional)
+        #expect(result.reasons.first == "A temporary restriction is planned here")
+    }
+
+    @Test func twoGrantsThatDisagreeTakeTheMoreDemandingReading() {
+        // An older "free bay" record and a newer "paid, 2 hours" record on one kerb.
+        let free = bay("old")
+        let newer = paidBay(cond: time([period(monSat, [("08:30", "18:30")], extra: ["maxStay": 7200])], rate: perQuarterHour(1.0)))
+        let result = evaluate(newer, with: [free], stay("2026-10-05 10:00", "2026-10-05 11:00"))
+        #expect(result.status == .allowedPaid)
+        #expect(result.limits.maxStay == 7200)
+        #expect(result.estimatedCost == nil)  // two grants: no single tariff to quote
+        #expect(result.confidence == .medium)
+        // The same from the other record's point of view.
+        #expect(evaluate(free, with: [newer], stay("2026-10-05 10:00", "2026-10-05 13:00")).status == .prohibited)  // over 2 hours
+    }
+
+    @Test func expiredTimeConditionInsideAnAndMakesTheOrderAbsent() {
+        // AND of a current condition and one whose dates have passed: the order
+        // no longer exists, which is unknown, not "outside hours".
+        let lapsed = bay(cond: allOf(always, time(start: "2026-01-01T00:00:00Z", end: "2026-06-01T00:00:00Z")))
+        #expect(evaluate(lapsed, stay("2026-10-05 10:00", "2026-10-05 11:00")).status == .unknown)
+        // OR: one branch still current keeps the order alive.
+        let alive = bay(cond: anyOf(always, time(start: "2026-01-01T00:00:00Z", end: "2026-06-01T00:00:00Z")))
+        #expect(evaluate(alive, stay("2026-10-05 10:00", "2026-10-05 11:00")).status == .allowedFree)
+    }
+
+    @Test func parkingAreaDoesNotGrantParkingOnAKerbButAnAreaRestrictionApplies() {
+        let period = stay("2026-10-05 10:00", "2026-10-05 11:00")
+        // A loading restriction on the kerb says nothing about waiting; a paid
+        // parking *area* drawn over it must not turn the kerb into a paid bay.
+        let noLoading = feature(reg: "kerbsideNoLoading", role: "info", cat: "noLoading", cond: always)
+        let paidArea = paidBay("area", cond: always, ["geomQuality": "area"])
+        #expect(evaluate(noLoading, with: [paidArea], period).status == .unknown)
+        // A no-waiting area does apply to a bay inside it.
+        let restrictedArea = noWaiting("area", cond: always, ["geomQuality": "area"])
+        #expect(evaluate(bay(), with: [restrictedArea], period).status == .prohibited)
+    }
+
     @Test func partialOverlapIsAppliedToTheWholeSectionAndFlagged() {
         let junction = noWaiting("junction")
         let free = relinked(bay(), related: ["junction"], partial: ["junction"])
@@ -480,6 +560,24 @@ struct SafetyTests {
         #expect(evaluate(strange, hour).status == .unknown)
         let badTime = bay(cond: ["time": ["start": "not a date"]])
         #expect(evaluate(badTime, hour).status == .unknown)
+    }
+
+    @Test func unreadableTimeWindowsAreUnknownNotNever() {
+        // A restriction whose hours cannot be read must not look permanently off.
+        for times in [[[28800]], [[28800, 99999]], [[-5, 3600]], [[28800, 28800]]] as [[[Int]]] {
+            let restriction = noWaiting(cond: time([["times": times, "days": [["dow": everyDay]]]]))
+            #expect(evaluate(restriction, hour).status == .unknown, "\(times)")
+        }
+        let allDay = noWaiting(cond: time([["times": [[0, 0]]]]))
+        #expect(evaluate(allDay, hour).status == .prohibited)
+        let noDays = noWaiting(cond: time([["days": [Any]()]]))
+        #expect(evaluate(noDays, hour).status == .unknown)
+    }
+
+    @Test func emptyConditionSetsAreUnknown() {
+        #expect(evaluate(noWaiting(cond: ["op": "and", "items": [Any]()]), hour).status == .unknown)
+        #expect(evaluate(bay(cond: ["op": "or", "items": [Any]()]), hour).status == .unknown)
+        #expect(evaluate(bay(cond: ["op": "xor", "items": [Any]()]), hour).status == .unknown)
     }
 
     @Test func zoneIsNeverEvaluatedAsAKerb() {
