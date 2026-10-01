@@ -68,6 +68,8 @@ enum Palette {
     static let specialist = Color(light: 0x7B3FC4, dark: 0xBF8CFF)
     static let unknown = Color(light: 0x6E7480, dark: 0xA0A6B2)
     static let zone = Color(light: 0x4A5568, dark: 0xCBD5E0)
+    /// Dark enough for white text in both appearances.
+    static let demoBanner = Color(light: 0x6B2FB5, dark: 0x6B2FB5)
 }
 
 extension Color {

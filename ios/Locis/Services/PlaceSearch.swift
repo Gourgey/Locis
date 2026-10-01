@@ -36,7 +36,7 @@ protocol PlaceSearching: AnyObject {
     func resolve(query: String) async throws -> ResolvedPlace
 }
 
-/// MapKit-backed search, biased towards Great Britain.
+/// MapKit-backed search, biased towards London (results elsewhere still appear).
 @MainActor
 final class MapKitPlaceSearch: NSObject, PlaceSearching, @preconcurrency MKLocalSearchCompleterDelegate {
     var onSuggestions: (([PlaceSuggestion]) -> Void)?
@@ -44,15 +44,15 @@ final class MapKitPlaceSearch: NSObject, PlaceSearching, @preconcurrency MKLocal
     private let completer = MKLocalSearchCompleter()
     private var completions: [String: MKLocalSearchCompletion] = [:]
 
-    static let greatBritain = MKCoordinateRegion(
-        center: CLLocationCoordinate2D(latitude: 54.5, longitude: -3.0),
-        span: MKCoordinateSpan(latitudeDelta: 10, longitudeDelta: 11))
+    static let searchRegion = MKCoordinateRegion(
+        center: CLLocationCoordinate2D(latitude: 51.5079, longitude: -0.1277),
+        span: MKCoordinateSpan(latitudeDelta: 0.7, longitudeDelta: 1.1))
 
     override init() {
         super.init()
         completer.delegate = self
         completer.resultTypes = [.address, .pointOfInterest]
-        completer.region = Self.greatBritain
+        completer.region = Self.searchRegion
     }
 
     func updateQuery(_ query: String) {
@@ -74,7 +74,7 @@ final class MapKitPlaceSearch: NSObject, PlaceSearching, @preconcurrency MKLocal
     func resolve(query: String) async throws -> ResolvedPlace {
         let request = MKLocalSearch.Request()
         request.naturalLanguageQuery = query
-        request.region = Self.greatBritain
+        request.region = Self.searchRegion
         return try await run(request, fallbackName: query)
     }
 

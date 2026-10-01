@@ -170,7 +170,7 @@ struct DemoBanner: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
             .frame(maxWidth: .infinity)
-            .background(Palette.specialist, in: .capsule)
+            .background(Palette.demoBanner, in: .capsule)
             .accessibilityAddTraits(.isStaticText)
     }
 }

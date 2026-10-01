@@ -406,11 +406,22 @@ public struct ParkingRulesEngine: Sendable {
     }
 
     static func timeRange(_ interval: DateInterval, calendar: LondonCalendar) -> String {
+        let sameDay = calendar.localDay(of: interval.start) == calendar.localDay(of: interval.end.addingTimeInterval(-1))
+        let formatter = sameDay ? Formatters.time : Formatters.dayAndTime
+        return "(\(formatter.string(from: interval.start))\u{2013}\(formatter.string(from: interval.end)))"
+    }
+}
+
+/// Date formatters are costly to create and safe to share for formatting.
+private enum Formatters {
+    static let time = make("HH:mm")
+    static let dayAndTime = make("EEE HH:mm")
+
+    private static func make(_ format: String) -> DateFormatter {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_GB")
-        formatter.timeZone = calendar.timeZone
-        let sameDay = calendar.localDay(of: interval.start) == calendar.localDay(of: interval.end.addingTimeInterval(-1))
-        formatter.dateFormat = sameDay ? "HH:mm" : "EEE HH:mm"
-        return "(\(formatter.string(from: interval.start))\u{2013}\(formatter.string(from: interval.end)))"
+        formatter.timeZone = LondonCalendar.shared.timeZone
+        formatter.dateFormat = format
+        return formatter
     }
 }

@@ -302,3 +302,34 @@ struct StaySelectionTests {
         #expect(overnight.rangeDescription() == "22:00 Sat 3 Oct \u{2013} 08:00 Sun 4 Oct")
     }
 }
+
+@Suite("Performance")
+struct PerformanceTests {
+    /// A dense viewport: 1,500 kerb sections, each overlapped by a timed
+    /// restriction, evaluated for an overnight stay. Must stay interactive.
+    @Test func denseViewportEvaluatesQuickly() {
+        var context: [String: Feature] = [:]
+        var primaries: [Feature] = []
+        for index in 0..<1500 {
+            let restriction = noWaiting("r\(index)", cond: time([period(monFri, [("16:00", "19:00")])]))
+            let bay = relinked(
+                paidBay("b\(index)", cond: time([period(monSat, [("08:30", "18:30")], extra: ["maxStay": 14400])], rate: perQuarterHour(1.2))),
+                related: [restriction.id])
+            context[bay.id] = bay
+            context[restriction.id] = restriction
+            primaries.append(bay)
+        }
+        let engine = ParkingRulesEngine(holidays: testHolidays)
+        let overnight = stay("2026-10-05 17:00", "2026-10-06 10:00")
+        let clock = ContinuousClock()
+        var prohibited = 0
+        let elapsed = clock.measure {
+            for feature in primaries where engine.evaluate(feature, context: context, stay: overnight, profile: .standard).status == .prohibited {
+                prohibited += 1
+            }
+        }
+        #expect(prohibited == 1500)
+        #expect(elapsed < .seconds(3), "evaluating 1,500 features took \(elapsed)")
+        print("PERF: 1500 features in \(elapsed)")
+    }
+}
