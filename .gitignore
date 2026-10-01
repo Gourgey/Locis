@@ -24,3 +24,7 @@ ios/build/
 # macOS
 .DS_Store
 ios/Config/Local.xcconfig
+
+# Logo source files kept out of the public repository
+Logo/logo.ai
+Logo/logo-01.png
