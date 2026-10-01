@@ -36,6 +36,25 @@ reconcile anything the event feed missed.
 
 A failed update never publishes: the previous data stays live.
 
+### Limits on the free plan
+
+Checked against GitHub's documentation on 1 October 2026.
+
+- **Public repository:** standard runners are free with no minute limit.
+- **Private repository:** 2,000 minutes a month are included. The daily data job
+  runs on Linux and should use a small fraction of that. The macOS job in
+  `ci.yml` is billed at about ten times the Linux rate, so in a private repository
+  remove it or run it only by hand.
+- **If the allowance runs out** and no payment method is on file, jobs are blocked
+  until the next month. Nothing is charged. The app keeps working on the last
+  published data, which gets older until the job runs again.
+- **Inactivity:** GitHub disables scheduled workflows in a public repository after
+  60 days without repository activity. The job re-enables itself on every run to
+  reset that timer; if it is ever disabled anyway, press "Enable workflow" on the
+  Actions tab.
+- **How long the job takes on real data is not yet measured.** Check the first few
+  runs on the Actions tab.
+
 ### Running it yourself instead
 
 ```bash
