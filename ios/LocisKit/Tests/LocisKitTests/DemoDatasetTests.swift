@@ -11,7 +11,7 @@ struct DemoDataset {
     let undecodable: Int
 
     static let shared: DemoDataset = {
-        let root = Bundle.module.url(forResource: "demo", withExtension: nil)!
+        let root = DemoData.directory
         let decoder = LocisDecoding.decoder()
         let manifest = try! decoder.decode(Manifest.self, from: Data(contentsOf: root.appendingPathComponent("manifest.json")))
         var features: [String: Feature] = [:]

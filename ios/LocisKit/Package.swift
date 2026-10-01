@@ -8,11 +8,11 @@ let package = Package(
         .library(name: "LocisKit", targets: ["LocisKit"])
     ],
     targets: [
-        .target(name: "LocisKit"),
-        .testTarget(
-            name: "LocisKitTests",
-            dependencies: ["LocisKit"],
+        .target(
+            name: "LocisKit",
+            // The synthetic demo dataset, kept as a directory tree.
             resources: [.copy("Resources/demo")]
         ),
+        .testTarget(name: "LocisKitTests", dependencies: ["LocisKit"]),
     ]
 )
