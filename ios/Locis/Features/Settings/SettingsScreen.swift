@@ -24,20 +24,15 @@ struct SettingsScreen: View {
                     )
                 }
 
-                Section {
-                    if app.hasLiveData {
-                        Toggle("Use demo data", isOn: $settings.preferDemoData)
-                    } else {
+                if app.source.isDemo {
+                    // Only development builds with no data address configured get here.
+                    Section {
                         LabeledContent("Data", value: "Demo only")
+                    } header: {
+                        Text("Parking data")
+                    } footer: {
+                        Text("This build has no live data source configured, so it shows made-up demo streets.")
                     }
-                } header: {
-                    Text("Parking data")
-                } footer: {
-                    Text(
-                        app.hasLiveData
-                            ? "Demo data shows made-up streets so you can try the app. Turn it off to see published parking rules."
-                            : "This build has no live data source configured, so it shows made-up demo streets."
-                    )
                 }
 
                 Section {

@@ -6,7 +6,7 @@ import SwiftUI
 struct MapScreen: View {
     @Environment(AppModel.self) private var app
 
-    @State private var position: MapCameraPosition = .automatic
+    @State private var command: MapCommand?
     @State private var search = SearchViewModel(service: MapKitPlaceSearch())
     @State private var location = LocationService()
     @State private var showingStayEditor = false
@@ -21,8 +21,13 @@ struct MapScreen: View {
         @Bindable var model = app.map
         ZStack(alignment: .top) {
             ParkingMap(
-                model: model, position: $position, destination: search.destination,
-                showsUserLocation: location.isAuthorized
+                items: model.visibleItems, zones: model.zones,
+                // The filter changes what is drawn without changing the model's items.
+                revision: model.itemsRevision &* 8 &+ (MapFilter.allCases.firstIndex(of: model.filter) ?? 0),
+                selectedID: model.selectedID, destination: search.destination,
+                showsUserLocation: location.isAuthorized, command: command,
+                onRegionChange: { model.viewportChanged($0) },
+                onSelect: { model.selectedID = $0 }
             )
             .ignoresSafeArea()
 
@@ -85,7 +90,6 @@ struct MapScreen: View {
         }
         .onAppear(perform: setInitialPosition)
         .onChange(of: location.authorization) { followUserIfPossible() }
-        .onChange(of: app.source) { setPosition(for: app.source) }
     }
 
     private var activeSheet: Binding<ActiveSheet?> {
@@ -131,23 +135,20 @@ struct MapScreen: View {
             metres = 600
         }
         #endif
-        position = .region(MKCoordinateRegion(center: centre, latitudinalMeters: metres, longitudinalMeters: metres))
+        command = MapCommand(kind: .region(center: centre, metres: metres), animated: false)
     }
 
     private func show(_ place: ResolvedPlace) {
         searchFocused = false
         model.selectedID = nil
-        withAnimation {
-            // Neighbourhood level: close enough to read kerb rules around the destination.
-            position = .region(
-                MKCoordinateRegion(center: place.coordinate, latitudinalMeters: 700, longitudinalMeters: 700))
-        }
+        // Neighbourhood level: close enough to read kerb rules around the destination.
+        command = MapCommand(kind: .region(center: place.coordinate, metres: 700))
     }
 
     private func followUserIfPossible() {
         guard location.wantsToFollowUser, location.isAuthorized else { return }
         location.wantsToFollowUser = false
-        withAnimation { position = .userLocation(fallback: .automatic) }
+        command = MapCommand(kind: .userLocation)
     }
 }
 

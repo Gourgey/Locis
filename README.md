@@ -46,8 +46,13 @@ Docker is not needed.
 
 ## Run it
 
-The app works out of the box on built-in **demo data**: made-up streets drawn over
-parkland, clearly labelled, so nothing can be mistaken for a real rule.
+The app downloads live parking data from <https://gourgey.github.io/Locis/>, which a
+scheduled job republishes every day (see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)).
+
+For development without that data, empty `LOCIS_DATA_BASE_URL` in
+`ios/Config/Locis.xcconfig` (or override it in `ios/Config/Local.xcconfig`). The app
+then runs on built-in **demo data**: made-up streets drawn over parkland, clearly
+labelled, so nothing can be mistaken for a real rule.
 
 ```bash
 scripts/setup.sh
@@ -152,12 +157,11 @@ SIMCTL_CHILD_LOCIS_DATA_DIR="$PWD/pipeline/dist" SIMCTL_CHILD_LOCIS_START="51.61
     xcrun simctl launch "iPhone 17 Pro" studio.curateddesign.Locis
 ```
 
-## What you need to supply later
+## Before App Store submission
 
-- **D-TRO credentials**, as above. Until then everything runs on demo data.
-- **A place to publish the data**: the provided workflow uses GitHub Pages.
-- **A privacy policy URL** for the App Store listing: `LOCIS_PRIVACY_POLICY_URL`
-  in `ios/Config/Locis.xcconfig`.
+- **A privacy policy URL**: set `LOCIS_PRIVACY_POLICY_URL` in
+  `ios/Config/Locis.xcconfig` once the page is live.
+- **Screenshots** taken on live data.
 
 ## Renaming the app
 

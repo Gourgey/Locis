@@ -53,7 +53,7 @@ A Swift package with no UI and no third-party dependencies, so its tests run wit
 | Folder | Contents |
 |---|---|
 | `App/` | Entry point, `AppModel`, `AppConfiguration`, `SettingsStore` |
-| `Features/Map` | `MapScreen`, `ParkingMap` (overlays and hit testing), legend |
+| `Features/Map` | `MapScreen`, `ParkingMap` (`MKMapView` wrapper: grouped overlays and hit testing), legend |
 | `Features/Search` | `SearchViewModel`, `SearchField` |
 | `Features/TimeSelection` | `StayControl`, `StayEditorSheet` |
 | `Features/ParkingDetails` | `ParkingDetailSheet` |
@@ -77,8 +77,11 @@ Services sit behind protocols (`ParkingDataProviding`, `PlaceSearching`,
 5. Each tile is read from memory, then the device cache, then the network. Tile
    names contain a content hash, so a cached tile is valid for as long as the
    manifest lists that hash.
-6. Every drawable feature is evaluated off the main thread for the selected stay and
-   profile. Changing the stay or the profile repeats only this step.
+6. Features on screen (plus a 30% margin) are evaluated off the main thread for the
+   selected stay and profile. Changing the stay or the profile repeats only this step.
+7. The map (`ParkingMap`, an `MKMapView` wrapper) draws every line of one style as a
+   single `MKMultiPolyline`. A busy street scene has well over a thousand kerb
+   sections; as individual SwiftUI map shapes they took about six seconds to appear.
 
 ## Performance
 

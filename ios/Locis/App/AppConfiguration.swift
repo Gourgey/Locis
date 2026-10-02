@@ -26,13 +26,13 @@ enum AppConfiguration {
         return url
     }
 
-    /// The data source for this launch: live data when configured, unless the
-    /// user has chosen the demo in Settings.
-    static func dataSource(preferDemo: Bool) -> DataSourceConfiguration {
+    /// The data source: the published dataset when the build has one configured.
+    /// The synthetic demo data is only used by development builds without one.
+    static func dataSource() -> DataSourceConfiguration {
         #if DEBUG
         if let local = debugDataDirectory { return .demo(directory: local) }
         #endif
-        if let remoteBaseURL, !preferDemo { return .remote(baseURL: remoteBaseURL) }
+        if let remoteBaseURL { return .remote(baseURL: remoteBaseURL) }
         return .demo(directory: DemoData.directory)
     }
 

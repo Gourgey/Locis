@@ -100,7 +100,11 @@ public final class ParkingMapModel {
 
     public private(set) var phase: Phase = .idle
     public private(set) var notice: Notice?
-    public private(set) var items: [MapItem] = []
+    public private(set) var items: [MapItem] = [] {
+        didSet { itemsRevision += 1 }
+    }
+    /// Increases whenever `items` or `zones` change, so the map view can tell cheaply.
+    public private(set) var itemsRevision = 0
     public private(set) var zones: [ZoneItem] = []
     public private(set) var manifestState: ManifestState?
     public private(set) var isEvaluating = false
@@ -124,6 +128,8 @@ public final class ParkingMapModel {
 
     /// Tallest map area (degrees of latitude) for which kerb rules are loaded: about 4 km.
     public static let maximumSpanDegrees = 0.036
+    /// How far beyond the screen kerbs are evaluated and drawn, as a fraction of its size.
+    static let evaluationMargin = 0.3
     static let maximumTilesPerRequest = 30
     static let maximumLoadedTiles = 120
 
@@ -294,10 +300,14 @@ public final class ParkingMapModel {
         let area = area
         let profile = profile
         let holidays = state.manifest.holidays
+        // Only what is on screen (plus a margin for small pans) is evaluated and
+        // drawn. Loaded tiles reach further than the screen, and a dense area has
+        // thousands of kerbs.
+        let visible = viewport?.expanded(by: Self.evaluationMargin)
         isEvaluating = true
         evaluationTask = Task { [weak self] in
             let result = await Task.detached(priority: .userInitiated) {
-                Self.evaluate(area: area, stay: stay, profile: profile, holidays: holidays)
+                Self.evaluate(area: area, stay: stay, profile: profile, holidays: holidays, visible: visible)
             }.value
             guard let self, !Task.isCancelled, generation == self.generation else { return }
             self.evaluations = result.evaluations
@@ -317,7 +327,7 @@ public final class ParkingMapModel {
     }
 
     nonisolated private static func evaluate(
-        area: LoadedArea, stay: Stay, profile: VehicleProfile, holidays: HolidayCalendar
+        area: LoadedArea, stay: Stay, profile: VehicleProfile, holidays: HolidayCalendar, visible: BoundingBox?
     ) -> Evaluated {
         let engine = ParkingRulesEngine(holidays: holidays)
         var result = Evaluated()
@@ -329,6 +339,7 @@ public final class ParkingMapModel {
                 continue
             }
             guard area.memberIDs.contains(feature.id), isDrawn(feature) else { continue }
+            if let visible, let box = feature.geom.boundingBox, !visible.intersects(box) { continue }
             let incomplete =
                 area.isIncomplete(around: feature.id)
                 || (feature.related ?? []).contains { area.features[$0] == nil }

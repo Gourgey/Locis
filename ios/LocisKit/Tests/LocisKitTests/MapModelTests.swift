@@ -251,6 +251,26 @@ struct MapModelTests {
         #expect(model.detail(for: "missing") == nil)
     }
 
+    @Test func onlyKerbsNearTheScreenAreEvaluatedAndDrawn() async {
+        let (model, provider) = makeModel()
+        model.viewportChanged(quarter)
+        await model.settle()
+        let everything = model.items.count
+        // Zoom in on the north-west corner of the demo quarter (around demo 25).
+        let corner = BoundingBox(west: -0.2796, south: 51.4393, east: -0.2786, north: 51.4398)
+        let calls = await provider.loadCalls.count
+        model.viewportChanged(corner)
+        await model.settle()
+        #expect(item(model, "demo 25") != nil)
+        #expect(item(model, "demo 06") == nil)  // far end of the quarter
+        #expect(model.items.count < everything / 2)
+        #expect(await provider.loadCalls.count == calls)  // tiles were already loaded
+        // Panning back brings the rest back without another download.
+        model.viewportChanged(quarter)
+        await model.settle()
+        #expect(model.items.count == everything)
+    }
+
     @Test func areasAndPointsKeepTheirShape() async {
         let (model, _) = makeModel()
         model.viewportChanged(quarter)

@@ -60,6 +60,10 @@ public struct BoundingBox: Sendable, Equatable {
         other.west >= west && other.east <= east && other.south >= south && other.north <= north
     }
 
+    public func intersects(_ other: BoundingBox) -> Bool {
+        !(other.east < west || other.west > east || other.north < south || other.south > north)
+    }
+
     /// The box grown by a fraction of its size on every side.
     public func expanded(by fraction: Double) -> BoundingBox {
         let dx = widthDegrees * fraction

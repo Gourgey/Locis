@@ -14,10 +14,6 @@ final class SettingsStore {
     var blueBadge: Bool {
         didSet { defaults.set(blueBadge, forKey: Keys.blueBadge) }
     }
-    /// Use the synthetic demo data even when a live dataset is configured.
-    var preferDemoData: Bool {
-        didSet { defaults.set(preferDemoData, forKey: Keys.preferDemo) }
-    }
 
     var profile: VehicleProfile { VehicleProfile(vehicleType: vehicleType, blueBadge: blueBadge) }
 
@@ -25,12 +21,10 @@ final class SettingsStore {
         self.defaults = defaults
         vehicleType = VehicleType(rawValue: defaults.string(forKey: Keys.vehicleType) ?? "") ?? .car
         blueBadge = defaults.bool(forKey: Keys.blueBadge)
-        preferDemoData = defaults.bool(forKey: Keys.preferDemo)
     }
 
     private enum Keys {
         static let vehicleType = "vehicleType"
         static let blueBadge = "blueBadge"
-        static let preferDemo = "preferDemoData"
     }
 }

@@ -74,8 +74,9 @@ LOCIS_DATA_BASE_URL = https:/$()/<user>.github.io/<repo>
 ```
 
 The `/$()/` is needed because xcconfig files treat `//` as a comment. The URL must
-be HTTPS. With it empty, the app uses the demo data. With it set, Settings gains a
-"Use demo data" switch.
+be HTTPS. With it empty, the app uses the built-in demo data, which is for
+development only. With it set, the app uses the published data and the demo
+streets are never shown.
 
 For a value you do not want to commit, put it in `ios/Config/Local.xcconfig`
 (git-ignored).

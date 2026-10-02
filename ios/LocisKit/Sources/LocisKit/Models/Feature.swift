@@ -93,6 +93,23 @@ public enum Geometry: Sendable, Equatable {
     case polygon([[[Coordinate]]])
     case point([Coordinate])
 
+    /// The smallest box containing the geometry, or nil when it has no positions.
+    public var boundingBox: BoundingBox? {
+        var west = Double.infinity, south = Double.infinity, east = -Double.infinity, north = -Double.infinity
+        func add(_ coordinate: Coordinate) {
+            west = min(west, coordinate.longitude)
+            east = max(east, coordinate.longitude)
+            south = min(south, coordinate.latitude)
+            north = max(north, coordinate.latitude)
+        }
+        switch self {
+        case .line(let parts): parts.forEach { $0.forEach(add) }
+        case .polygon(let polygons): polygons.forEach { $0.forEach { $0.forEach(add) } }
+        case .point(let points): points.forEach(add)
+        }
+        return west.isFinite ? BoundingBox(west: west, south: south, east: east, north: north) : nil
+    }
+
     /// A representative position, used for directions and map selection.
     public var representativeCoordinate: Coordinate? {
         switch self {
