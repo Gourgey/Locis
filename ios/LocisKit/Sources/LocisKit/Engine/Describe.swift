@@ -163,6 +163,7 @@ extension Describe {
             var parts: [String] = []
             if let type = vehicle.type { parts.append(vehicleName(type)) }
             if let usage = vehicle.usage { parts.append("\(ConditionEvaluator.friendly(usage)) use") }
+            if let fuel = vehicle.fuel, !fuel.isEmpty { parts.append("\(fuel.map(ConditionEvaluator.friendly).joined(separator: " or ")) vehicles") }
             if let extra = vehicle.unsupported, !extra.isEmpty {
                 parts.append("vehicles meeting other limits (\(extra.map(ConditionEvaluator.friendly).joined(separator: ", ")))")
             }
@@ -185,9 +186,33 @@ extension Describe {
             lines.append("\(prefix): \(ConditionEvaluator.friendly(type))")
         case .other(let text):
             lines.append("Other condition: \(text)")
+        case .concessions(let items):
+            for item in items { lines.append(concession(item)) }
         case .unsupported(let why):
             lines.append("A condition that could not be read (\(why))")
         }
+    }
+
+    /// "Concession recorded: Blue Badge holders, up to 3 hours".
+    private static func concession(_ node: ConditionNode) -> String {
+        var who: [String] = []
+        var limit: Int?
+        func visit(_ node: ConditionNode) {
+            switch node.kind {
+            case .and(let items), .or(let items), .xor(let items): items.forEach(visit)
+            case .occupant, .driver: who.append("Blue Badge holders")
+            case .access(let kinds): who.append(kinds.map(ConditionEvaluator.friendly).joined(separator: ", "))
+            case .time(let validity):
+                for stay in [validity.maxStay] + (validity.valid ?? []).map(\.maxStay) {
+                    if let stay { limit = min(limit ?? stay, stay) }
+                }
+            default: who.append("other users")
+            }
+        }
+        visit(node)
+        let subject = who.isEmpty ? "some users" : who.joined(separator: ", ")
+        let suffix = limit.map { ", up to \(duration($0))" } ?? ""
+        return "Concession recorded (not applied by the app): \(subject)\(suffix)"
     }
 
     static func vehicleName(_ type: String) -> String {

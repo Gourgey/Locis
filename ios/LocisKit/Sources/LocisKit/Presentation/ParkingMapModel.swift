@@ -328,12 +328,15 @@ public final class ParkingMapModel {
                 }
                 continue
             }
-            guard isDrawn(feature) else { continue }
+            guard area.memberIDs.contains(feature.id), isDrawn(feature) else { continue }
             let incomplete =
                 area.isIncomplete(around: feature.id)
                 || (feature.related ?? []).contains { area.features[$0] == nil }
             let evaluation = engine.evaluate(
                 feature, context: area.features, stay: stay, profile: profile, dataIncomplete: incomplete)
+            // A kerb whose only records do not exist during the stay is the same
+            // as a kerb with no data: nothing is drawn.
+            if evaluation.noRuleInForce { continue }
             result.evaluations[feature.id] = evaluation
             let shape: MapItem.Shape
             switch feature.geom {

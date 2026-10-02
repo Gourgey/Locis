@@ -38,7 +38,7 @@ struct MapScreen: View {
                     }
                     if let notice = model.notice {
                         NoticePill(text: notice.message, isLoading: false)
-                    } else if model.phase == .loading {
+                    } else if model.phase == .loading || model.isEvaluating {
                         NoticePill(text: "Loading parking rules", isLoading: true)
                     }
                 }
@@ -115,8 +115,8 @@ struct MapScreen: View {
     }
 
     private func setPosition(for source: DataSourceConfiguration) {
-        let centre: CLLocationCoordinate2D
-        let metres: CLLocationDistance
+        var centre: CLLocationCoordinate2D
+        var metres: CLLocationDistance
         if source.isDemo {
             // The fictional demo quarter.
             centre = CLLocationCoordinate2D(latitude: DemoData.centre.latitude, longitude: DemoData.centre.longitude)
@@ -125,6 +125,12 @@ struct MapScreen: View {
             centre = CLLocationCoordinate2D(latitude: 51.5079, longitude: -0.1277)  // Charing Cross
             metres = 900
         }
+        #if DEBUG
+        if let start = AppConfiguration.debugStart {
+            centre = CLLocationCoordinate2D(latitude: start.latitude, longitude: start.longitude)
+            metres = 600
+        }
+        #endif
         position = .region(MKCoordinateRegion(center: centre, latitudinalMeters: metres, longitudinalMeters: metres))
     }
 

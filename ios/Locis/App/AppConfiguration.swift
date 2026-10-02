@@ -29,9 +29,30 @@ enum AppConfiguration {
     /// The data source for this launch: live data when configured, unless the
     /// user has chosen the demo in Settings.
     static func dataSource(preferDemo: Bool) -> DataSourceConfiguration {
+        #if DEBUG
+        if let local = debugDataDirectory { return .demo(directory: local) }
+        #endif
         if let remoteBaseURL, !preferDemo { return .remote(baseURL: remoteBaseURL) }
         return .demo(directory: DemoData.directory)
     }
+
+    #if DEBUG
+    /// Development only: read a dataset built by the pipeline straight from a folder
+    /// on the Mac when running in the Simulator, e.g.
+    /// `SIMCTL_CHILD_LOCIS_DATA_DIR=$PWD/pipeline/dist xcrun simctl launch ...`.
+    static var debugDataDirectory: URL? {
+        guard let path = ProcessInfo.processInfo.environment["LOCIS_DATA_DIR"], !path.isEmpty,
+            FileManager.default.fileExists(atPath: path + "/manifest.json")
+        else { return nil }
+        return URL(fileURLWithPath: path, isDirectory: true)
+    }
+
+    /// Development only: "latitude,longitude" to open the map at.
+    static var debugStart: (latitude: Double, longitude: Double)? {
+        let parts = (ProcessInfo.processInfo.environment["LOCIS_START"] ?? "").split(separator: ",").compactMap { Double($0) }
+        return parts.count == 2 ? (parts[0], parts[1]) : nil
+    }
+    #endif
 
     static let dtroURL = URL(string: "https://d-tro.dft.gov.uk")!
     static let licenceURL = URL(string: "https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/")!

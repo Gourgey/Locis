@@ -258,3 +258,98 @@ def test_feature_ids_are_stable():
     a = only_feature(by_number(1))["id"]
     b = only_feature(by_number(1))["id"]
     assert a == b and len(a) == 16
+
+
+def test_bulk_extract_timestamps_are_month_first():
+    from locis_pipeline.timeutil import to_utc_iso
+    from zoneinfo import ZoneInfo
+
+    assert to_utc_iso("04/23/2026 14:30:00", tz=ZoneInfo("UTC")) == "2026-04-23T14:30:00Z"
+    assert to_utc_iso("12/01/2026 00:00:05", tz=ZoneInfo("UTC")) == "2026-12-01T00:00:05Z"
+    assert to_utc_iso("23/04/2026 14:30:00", tz=ZoneInfo("UTC")) is None  # not day-first
+    envelope = by_number(1)
+    envelope["created"] = "04/23/2026 14:30:00"
+    envelope["lastUpdated"] = "06/23/2026 08:50:55"
+    feature = only_feature(envelope)
+    assert feature["published"] == "2026-04-23T14:30:00Z" and feature["updated"] == "2026-06-23T08:50:55Z"
+
+
+# --- exemption lists (a publishing habit found in real data) -------------------------
+
+
+def _kingston_tree(*branches):
+    """AND(time, OR(NOT(anyVehicle), *branches)) as one publisher writes exemptions."""
+    return {
+        "conditionSet": {
+            "operator": "and",
+            "conditions": [
+                {"timeValidity": {"start": "2026-01-01T00:00:00", "isPlaceholderTro": False}},
+                {
+                    "conditionSet": {
+                        "operator": "or",
+                        "conditions": [{"negate": True, "vehicleCharacteristics": {"vehicleType": "anyVehicle"}}, *branches],
+                    }
+                },
+            ],
+        }
+    }
+
+
+BADGE = {"occupantCondition": {"disabledWithPermit": True}}
+LOADING = {"accessCondition": {"accessConditionType": ["loadingAndUnloading"]}}
+BADGE_3H = {
+    "conditionSet": {
+        "operator": "and",
+        "conditions": [
+            BADGE,
+            {"timeValidity": {"start": "2026-01-01T00:00:00", "isPlaceholderTro": False, "validPeriod": [{"maxStayNoReturn": {"maximumOccupancy": "PT3H"}}]}},
+        ],
+    }
+}
+
+
+def _with_tree(number, tree, regulation_type=None):
+    envelope = by_number(number)
+    regulation = envelope["data"]["source"]["provision"][0]["regulation"]
+    regulation.pop("condition", None)
+    regulation["conditionSet"] = tree["conditionSet"]
+    if regulation_type:
+        regulation["generalRegulation"]["regulationType"] = regulation_type
+    return only_feature(envelope)
+
+
+def test_exemption_list_on_a_restriction_becomes_a_concessions_node():
+    feature = only_feature(by_number(40))
+    assert "exemptionList" in feature["issues"]
+    concessions = feature["cond"]["items"][1]["concessions"]
+    assert len(concessions) == 2
+    assert concessions[0]["items"][0] == {"occupant": {"disabled": True}}
+    # The marker that matches no vehicle is gone.
+    assert '"anyVehicle"' not in json.dumps(feature["cond"])
+
+
+def test_exemption_list_on_a_bay_is_rewritten_only_for_plain_concessions():
+    paid = _with_tree(3, _kingston_tree(BADGE_3H, LOADING))
+    assert "concessions" in paid["cond"]["items"][1] and "exemptionList" in paid["issues"]
+    # An electric-vehicle condition is not a concession: left exactly as published.
+    electric = _with_tree(1, _kingston_tree({"vehicleCharacteristics": {"fuelType": ["electric"]}}))
+    assert electric["cond"]["items"][1]["op"] == "or"
+    assert "exemptionList" not in electric.get("issues", [])
+    # On a restriction the same list is always treated as exemptions.
+    restriction = _with_tree(6, _kingston_tree({"vehicleCharacteristics": {"fuelType": ["electric"]}}))
+    assert "concessions" in restriction["cond"]["items"][1]
+
+
+def test_negated_any_vehicle_outside_an_or_is_left_alone():
+    envelope = by_number(19)
+    cond = envelope["data"]["source"]["provision"][0]["regulation"]["conditionSet"]["conditions"][1]
+    cond["vehicleCharacteristics"]["vehicleType"] = "anyVehicle"
+    cond["negate"] = True
+    feature = only_feature(envelope)
+    assert feature["cond"]["items"][1] == {"not": {"vehicle": {"type": "anyVehicle"}}}
+    assert "exemptionList" not in feature.get("issues", [])
+
+
+def test_fuel_type_is_passed_through():
+    vehicle = only_feature(by_number(41))["cond"]["items"][1]["vehicle"]
+    assert vehicle == {"fuel": ["electric"]}

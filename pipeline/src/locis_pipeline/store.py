@@ -68,6 +68,15 @@ MIGRATIONS: list[str] = [
         value  TEXT NOT NULL
     );
     """,
+    # 2: authority names. The bulk extract carries only the authority's numeric
+    #    code; names are looked up from single-record responses and kept here.
+    """
+    CREATE TABLE authorities (
+        code        INTEGER PRIMARY KEY,
+        name        TEXT NOT NULL,
+        fetched_at  TEXT NOT NULL
+    );
+    """,
 ]
 
 
@@ -177,9 +186,40 @@ class Store:
             ),
         )
         self._replace_features(dtro_id, parsed)
+        if envelope.get("traName") and source.get("currentTraOwner") is not None:
+            self.set_authority_name(source["currentTraOwner"], str(envelope["traName"]), commit=False)
         if commit:
             self.db.commit()
         return "updated" if existing else "created"
+
+    # --- authorities ----------------------------------------------------------------
+
+    def set_authority_name(self, code: int, name: str, *, commit: bool = True) -> None:
+        self.db.execute(
+            "INSERT INTO authorities (code, name, fetched_at) VALUES (?, ?, ?) "
+            "ON CONFLICT (code) DO UPDATE SET name = excluded.name, fetched_at = excluded.fetched_at",
+            (int(code), name.strip(), utc_now_iso()),
+        )
+        if commit:
+            self.db.commit()
+
+    def authority_names(self) -> dict[int, str]:
+        return {row["code"]: row["name"] for row in self.db.execute("SELECT code, name FROM authorities")}
+
+    def authorities_without_names(self) -> list[tuple[int, str]]:
+        """Authority codes that own published features but have no name yet, each
+        with the id of one of its records to look the name up from."""
+        rows = self.db.execute(
+            """
+            SELECT r.tra_owner AS code, MIN(r.id) AS sample
+            FROM dtro_records r
+            WHERE r.deleted = 0 AND r.tra_owner IS NOT NULL
+              AND EXISTS (SELECT 1 FROM features f WHERE f.dtro_id = r.id)
+              AND r.tra_owner NOT IN (SELECT code FROM authorities)
+            GROUP BY r.tra_owner
+            """
+        )
+        return [(row["code"], row["sample"]) for row in rows]
 
     def _replace_features(self, dtro_id: str, parsed: ParsedRecord) -> None:
         self.db.execute("DELETE FROM features WHERE dtro_id = ?", (dtro_id,))

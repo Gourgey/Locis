@@ -123,6 +123,10 @@ public struct ParkingEvaluation: Sendable, Equatable {
     /// Conditions in the source that could not be resolved.
     public let unresolvedConditions: [String]
     public let segments: [StaySegment]
+    /// True when no recorded rule exists at any point of the stay (for example the
+    /// only record is a temporary order that has ended, or not yet begun). Such a
+    /// kerb is the same as one with no data, so the map does not draw it.
+    public let noRuleInForce: Bool
 
     /// Free, paid or conditional, for the map filter. Unknown is never "free".
     public var filterBucket: FilterBucket? {

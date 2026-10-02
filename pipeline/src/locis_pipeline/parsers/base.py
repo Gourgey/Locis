@@ -25,7 +25,7 @@ from shapely.geometry.base import BaseGeometry
 from .. import regulations as reg
 from ..geo import GeometryError, geometry_to_json, parse_ewkt, to_wgs84
 from ..timeutil import to_utc_iso
-from .common import collect, normalise_date
+from .common import collect, normalise_date, rewrite_exemption_lists
 
 _GEOMETRY_KEYS = {
     "linearGeometry": "linestring",
@@ -220,6 +220,9 @@ def _provision_features(
 
     tree, tree_issues = adapter.condition_tree(regulation)
     issues.extend(tree_issues)
+    tree, rewritten = rewrite_exemption_lists(tree, role)
+    if rewritten:
+        issues.append("exemptionList")
     if regulation.get("isDynamic") is True:
         issues.append("dynamic")
     if regulation.get("timeZone") not in (None, "Europe/London"):

@@ -20,6 +20,10 @@ public struct ConditionNode: Sendable, Equatable {
         case road(String)
         case nonVehicular(String)
         case other(String)
+        /// A published list of exemptions and concessions (Blue Badge, loading)
+        /// attached to a rule. It does not limit who the rule applies to; it is
+        /// shown as information. See `rewrite_exemption_lists` in the pipeline.
+        case concessions([ConditionNode])
         case unsupported(String)
     }
 
@@ -35,7 +39,8 @@ public struct ConditionNode: Sendable, Equatable {
         self.rateUnusable = rateUnusable
     }
 
-    /// Every node of the tree, this one included.
+    /// Every node of the tree, this one included. Concession lists are not
+    /// descended into: their contents are information, not conditions.
     public var allNodes: [ConditionNode] {
         switch kind {
         case .and(let items), .or(let items), .xor(let items):
@@ -103,6 +108,8 @@ extension ConditionNode: Decodable {
             kind = .road((try? value(String.self, "road")) ?? "")
         } else if has("nonVehicular") {
             kind = .nonVehicular((try? value(String.self, "nonVehicular")) ?? "")
+        } else if has("concessions") {
+            kind = (try? value([ConditionNode].self, "concessions")).map(Kind.concessions) ?? .unsupported("unreadable concession list")
         } else if has("other") {
             kind = .other((try? value(String.self, "other")) ?? "")
         } else if has("unsupported") {
@@ -118,12 +125,15 @@ public struct VehicleCondition: Sendable, Decodable, Equatable {
     public let type: String?
     /// D-TRO vehicleUsage.
     public let usage: String?
+    /// D-TRO fuelType values the condition lists.
+    public let fuel: [String]?
     /// Characteristics present in the source that the engine does not evaluate.
     public let unsupported: [String]?
 
-    public init(type: String? = nil, usage: String? = nil, unsupported: [String]? = nil) {
+    public init(type: String? = nil, usage: String? = nil, fuel: [String]? = nil, unsupported: [String]? = nil) {
         self.type = type
         self.usage = usage
+        self.fuel = fuel
         self.unsupported = unsupported
     }
 }

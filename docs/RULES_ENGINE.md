@@ -92,6 +92,13 @@ Things the engine cannot read are unknown, never "does not apply": a malformed t
 window, an empty list of day rules, an empty condition set, or a vehicle-use value
 it has not heard of.
 
+A `concessions` node (a published exemption list) is always true and is only
+displayed. An electric-only fuel condition is an eligibility question
+("For electric vehicles only"), since the profile does not record fuel.
+
+A feature with no rule existing at any point of the stay sets `noRuleInForce`, and
+the map does not draw it: it is the same as a kerb with no data.
+
 Some eligibility comes from the kind of bay, whatever the conditions say: disabled
 bays need a Blue Badge, motorcycle bays a motorcycle, loading bays, taxi ranks and
 cycle parking are never for parking a car, and a permit bay with no permit described
@@ -108,7 +115,9 @@ still needs a permit.
    A parking place recorded as an area is also set aside here: it cannot grant
    parking on a particular kerb. (A restriction recorded as an area still applies.)
 2. **Prohibitions.** Any provision that prohibits makes the segment prohibited. A
-   parking place never hides a no-waiting or no-stopping rule.
+   parking place never hides a no-waiting or no-stopping rule. A restriction whose
+   exemption looks to have been published inside out ("No stopping except buses"
+   written as "applies to buses") also prohibits; see DTRO.md.
 3. **Suspensions.** An active bay suspension makes the segment prohibited when there
    is a bay here, including outside the bay's own hours.
 4. **Unknowns.** If anything left is undeterminable, the segment is unknown.
@@ -173,7 +182,8 @@ Each of these lowers confidence one step and is listed in the details:
 - part of the stay is allowed only because no restriction is in force;
 - more than one parking rule is recorded on the kerb;
 - another rule covers part of the section;
-- the record uses the older, ambiguous condition nesting.
+- the record uses the older, ambiguous condition nesting;
+- the record carries an exemption list, which is not applied.
 
 None: **high**. One or two: **medium** (drawn dashed when allowed). Three or more:
 **low**, and a low-confidence result that would be allowed becomes **unknown**. An
@@ -203,6 +213,13 @@ To support permits later, add them to `VehicleProfile` and match them in
 4. Add a scenario to `demo.py`, run `scripts/build-demo-data.sh`, and add tests.
 
 ## Tests
+
+`RealDatasetDiagnostics.swift` runs every feature of a real dataset through the
+engine and prints what the app would show, while asserting the safety properties:
+
+```bash
+LOCIS_DATASET_DIR=$PWD/pipeline/dist swift test -c release --filter RealDataset --package-path ios/LocisKit
+```
 
 `RulesEngineTests.swift` covers intervals, limits, payment, eligibility, nested
 AND/OR/XOR, negation, overlaps, suspensions, temporary orders, unsupported data and

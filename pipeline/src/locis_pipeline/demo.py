@@ -102,8 +102,13 @@ def period(days=None, times=None, **extra) -> dict:
     return out
 
 
-def time_validity(*periods: dict, start: str = "2026-01-01T00:00:00", end: str | None = None, exceptions=None) -> dict:
+def time_validity(
+    *periods: dict, start: str = "2026-01-01T00:00:00", end: str | None = None, exceptions=None, maxStayNoReturn=None
+) -> dict:
     validity: dict = {"start": start, "isPlaceholderTro": False}
+    if maxStayNoReturn:
+        # A stay limit with no hours or days: carried on a period with no recurrence.
+        periods = (*periods, {"maxStayNoReturn": maxStayNoReturn})
     if end:
         validity["end"] = end
     if periods:
@@ -727,6 +732,63 @@ def demo_records() -> list[dict]:
                         )
                     ],
                     time_validity(period(MON_FRI, [("08:30:00", "18:30:00")])),
+                )
+            ],
+        )
+    )
+
+    # 39 A real-world publishing habit: "No stopping except buses" written with the
+    #    plain condition "bus", which literally restricts only buses.
+    records.append(
+        simple(
+            39, "bus stop published the wrong way round", "kerbsideNoStopping", "C", "south", 6,
+            all_of(always, {"vehicleCharacteristics": {"vehicleType": "bus"}}),
+        )
+    )
+    records[-1]["data"]["source"]["provision"][0]["provisionDescription"] = "No stopping except buses"
+
+    # 40 Another real-world habit: "No waiting at any time" with its exemptions
+    #    attached as OR(NOT(any vehicle), Blue Badge up to 3 hours, loading up to 40 minutes).
+    exemption_list = any_of(
+        {"negate": True, "vehicleCharacteristics": {"vehicleType": "anyVehicle"}},
+        all_of({"occupantCondition": {"disabledWithPermit": True}}, time_validity(**stay("PT3H"))),
+        all_of({"accessCondition": {"accessConditionType": ["loadingAndUnloading"]}}, time_validity(**stay("PT40M"))),
+    )
+    records.append(
+        record(
+            40, "no waiting with an exemption list order",
+            provisions=[
+                provision(
+                    "demo-40-p1", "No waiting at any time", "kerbsideNoWaiting",
+                    [
+                        kerb(
+                            "Placeholder Place, east side (demo 40: no waiting with an exemption list)",
+                            f"SRID=27700;LINESTRING({_pt(444.0, 100.0)}, {_pt(444.0, 160.0)})",
+                        )
+                    ],
+                    all_of(always, exemption_list),
+                )
+            ],
+        )
+    )
+
+    # 41 A bay for electric vehicles.
+    records.append(
+        record(
+            41, "electric vehicle bay order",
+            provisions=[
+                provision(
+                    "demo-41-p1", "Electric vehicle charging bay, maximum stay 3 hours", "kerbsideParkingPlace",
+                    [
+                        kerb(
+                            "Placeholder Place, east side (demo 41: electric vehicle bay)",
+                            f"SRID=27700;LINESTRING({_pt(444.0, 170.0)}, {_pt(444.0, 230.0)})",
+                        )
+                    ],
+                    all_of(
+                        time_validity(period(ALL_DAYS, None, **stay("PT3H"))),
+                        {"vehicleCharacteristics": {"fuelType": ["electric"]}},
+                    ),
                 )
             ],
         )

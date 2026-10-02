@@ -48,6 +48,9 @@ public enum SupportedFormat {
 /// The outcome of loading the tiles for a map area.
 public struct LoadedArea: Sendable {
     public var features: [String: Feature] = [:]
+    /// Features that belong to a loaded tile, as opposed to ones carried only as
+    /// context for evaluating a neighbour. Only these are drawn.
+    public var memberIDs: Set<String> = []
     /// Tiles the manifest lists that could not be loaded.
     public var failedTiles: Set<TileCoordinate> = []
     /// Tiles containing features this app version could not read.
@@ -132,12 +135,17 @@ extension LoadedArea {
         if tile.undecodable > 0 { incompleteTiles.insert(coordinate) }
         for feature in tile.features {
             features[feature.id] = feature
+            memberIDs.insert(feature.id)
             tileOfFeature[feature.id, default: []].insert(coordinate)
+        }
+        for feature in tile.context where features[feature.id] == nil {
+            features[feature.id] = feature
         }
     }
 
     public mutating func merge(_ other: LoadedArea) {
         features.merge(other.features) { _, new in new }
+        memberIDs.formUnion(other.memberIDs)
         failedTiles.formUnion(other.failedTiles)
         incompleteTiles.formUnion(other.incompleteTiles)
         emptyTiles.formUnion(other.emptyTiles)

@@ -21,7 +21,7 @@ struct DemoDataset {
             let url = root.appendingPathComponent("tiles/\(manifest.tileZoom)/\(parts[0])/\(parts[1])-\(hash).json")
             let tile = try! decoder.decode(Tile.self, from: Data(contentsOf: url))
             undecodable += tile.undecodable
-            for feature in tile.features { features[feature.id] = feature }
+            for feature in tile.features + tile.context { features[feature.id] = feature }
         }
         return DemoDataset(manifest: manifest, features: features, undecodable: undecodable)
     }()
@@ -157,6 +157,17 @@ struct DemoDatasetTests {
         #expect(demo.status(32, "", monday.0, monday.1, profile: VehicleProfile(blueBadge: true)) == .allowedFree)
         let centreline = demo.evaluate(demo.scenario(35), stay(monday.0, monday.1))
         #expect(centreline.status == .prohibited && centreline.confidence == .medium)
+    }
+
+    @Test func realWorldPublishingHabits() {
+        // 39: "No stopping except buses" published as "applies to buses".
+        #expect(demo.status(39, "", monday.0, monday.1) == .prohibited)
+        // 40: no waiting with an exemption list; not relaxed even for a Blue Badge.
+        #expect(demo.status(40, "", monday.0, monday.1) == .prohibited)
+        #expect(demo.status(40, "", monday.0, monday.1, profile: VehicleProfile(blueBadge: true)) == .prohibited)
+        #expect(demo.scenario(40).hasIssue("exemptionList"))
+        // 41: electric vehicle bay.
+        #expect(demo.status(41, "", monday.0, monday.1) == .conditional)
     }
 
     @Test func areasPointsAndZonesAreNotKerbLines() {

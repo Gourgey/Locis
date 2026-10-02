@@ -40,6 +40,27 @@ def _intersects(a: tuple[float, float, float, float], b: tuple[float, float, flo
     return not (a[2] < b[0] or a[0] > b[2] or a[3] < b[1] or a[1] > b[3])
 
 
+def _time_nodes(node: dict) -> list[dict]:
+    found = []
+    if "time" in node:
+        found.append(node["time"])
+    for item in node.get("items") or []:
+        found.extend(_time_nodes(item))
+    if "not" in node:
+        found.extend(_time_nodes(node["not"]))
+    return found
+
+
+def _has_expired(tree: dict, now_iso: str) -> bool:
+    """True when every time condition of a rule ended before now.
+
+    Such an order (typically a finished temporary one) can never apply to a stay
+    from now on, so it is left out of the tiles. It stays in the store.
+    """
+    times = _time_nodes(tree)
+    return bool(times) and all(t.get("end") and t["end"] < now_iso for t in times)
+
+
 def build_dataset(
     store: Store,
     out_dir: Path,
@@ -59,6 +80,9 @@ def build_dataset(
         shutil.rmtree(tiles_dir)
     tiles_dir.mkdir(parents=True, exist_ok=True)
 
+    authority_names = store.authority_names()
+    now_iso = generated_at or utc_now_iso()
+    expired = 0
     geoms: list[FeatureGeom] = []
     data_by_id: dict[str, dict] = {}
     wgs_by_id: dict[str, object] = {}
@@ -68,6 +92,11 @@ def build_dataset(
         if region is not None and not _intersects(bounds, region):
             continue
         data = json.loads(row["data"])
+        if _has_expired(data.get("cond") or {}, now_iso):
+            expired += 1
+            continue
+        if not data.get("auth") and data.get("authCode") in authority_names:
+            data["auth"] = authority_names[data["authCode"]]
         geometry = wkb.loads(row["geometry_bng"])
         if geometry.geom_type in ("Polygon", "MultiPolygon"):
             simplified = geometry.simplify(ZONE_SIMPLIFY_M, preserve_topology=True)
@@ -106,22 +135,25 @@ def build_dataset(
             if len(candidates) == 1 or shape.intersects(box(*tile_bounds(x, y, zoom))):
                 members[(x, y)].add(g.id)
 
-    # A tile also carries whatever its features are evaluated against, so the app
-    # never needs a neighbouring tile to evaluate a feature it can see.
-    for ids in members.values():
-        for feature_id in list(ids):
-            data = data_by_id[feature_id]
-            ids.update(i for i in data.get("related", []) if i in data_by_id)
-            ids.update(i for i in data.get("zones", []) if i in data_by_id)
-
     tile_index: dict[str, str] = {}
     for (x, y), ids in sorted(members.items()):
+        # A tile also carries whatever its features are evaluated against, so the
+        # app never needs a neighbouring tile to evaluate a feature it can see.
+        # Those go in "context": the app evaluates with them but does not draw them
+        # from this tile.
+        context: set[str] = set()
+        for feature_id in ids:
+            data = data_by_id[feature_id]
+            context.update(i for i in data.get("related", []) if i in data_by_id)
+            context.update(i for i in data.get("zones", []) if i in data_by_id)
+        context -= ids
         body = {
             "v": TILE_FORMAT_VERSION,
             "z": zoom,
             "x": x,
             "y": y,
             "features": [data_by_id[i] for i in sorted(ids)],
+            "context": [data_by_id[i] for i in sorted(context)],
         }
         encoded = json.dumps(body, separators=(",", ":"), ensure_ascii=False, sort_keys=True).encode()
         digest = hashlib.sha256(encoded).hexdigest()[:12]
@@ -132,7 +164,8 @@ def build_dataset(
 
     authorities: dict[str, int] = defaultdict(int)
     for data in data_by_id.values():
-        authorities[str(data.get("auth") or data.get("authCode") or "Unknown authority")] += 1
+        code = data.get("authCode")
+        authorities[str(data.get("auth") or (f"Authority {code}" if code else "Unknown authority"))] += 1
 
     all_bounds = list(bounds_by_id.values())
     counts = store.counts()
@@ -159,6 +192,7 @@ def build_dataset(
             "records": counts["records"],
             "features": len(data_by_id),
             "tiles": len(tile_index),
+            "expiredOmitted": expired,
             "byParseStatus": counts["byParseStatus"],
             "bySchemaVersion": counts["bySchemaVersion"],
         },

@@ -64,7 +64,12 @@ def to_utc_iso(text: str, tz: ZoneInfo = LONDON) -> str | None:
     try:
         parsed = datetime.fromisoformat(raw)
     except ValueError:
-        return None
+        # The bulk extract writes its Created / LastUpdated columns as
+        # month/day/year, e.g. "04/23/2026 14:30:00".
+        try:
+            parsed = datetime.strptime(raw, "%m/%d/%Y %H:%M:%S")
+        except ValueError:
+            return None
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=tz)
     return parsed.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")

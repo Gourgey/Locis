@@ -251,11 +251,14 @@ public struct Tile: Sendable, Decodable {
     public let x: Int
     public let y: Int
     public let features: [Feature]
+    /// Features from neighbouring tiles that this tile's features are evaluated
+    /// against. They are not drawn from this tile.
+    public let context: [Feature]
     /// Features in the tile that this app version could not read. When this is not
     /// zero a rule may be missing, so nothing in the tile can be shown as allowed.
     public let undecodable: Int
 
-    private enum Keys: String, CodingKey { case v, z, x, y, features }
+    private enum Keys: String, CodingKey { case v, z, x, y, features, context }
     private struct Lossy: Decodable {
         let value: Feature?
         init(from decoder: Decoder) throws { value = try? Feature(from: decoder) }
@@ -269,7 +272,9 @@ public struct Tile: Sendable, Decodable {
         y = try container.decode(Int.self, forKey: .y)
         let lossy = try container.decode([Lossy].self, forKey: .features)
         features = lossy.compactMap(\.value)
-        undecodable = lossy.count - features.count
+        let lossyContext = try container.decodeIfPresent([Lossy].self, forKey: .context) ?? []
+        context = lossyContext.compactMap(\.value)
+        undecodable = (lossy.count - features.count) + (lossyContext.count - context.count)
     }
 }
 

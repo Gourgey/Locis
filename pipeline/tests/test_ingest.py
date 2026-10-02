@@ -235,3 +235,32 @@ def test_region_setting(monkeypatch):
     monkeypatch.setenv("LOCIS_REGION", "1,2,3")
     with pytest.raises(ValueError):
         load_settings()
+
+
+def test_authority_names_are_looked_up_when_the_extract_has_only_codes(store, tmp_path):
+    from locis_pipeline.ingest import resolve_authority_names
+    from locis_pipeline.tiles import build_dataset
+
+    # The bulk extract has no authority name column.
+    nameless = [dict(r, traName=None) for r in demo_records()[:3]]
+    with_names = demo_records()[:3]
+    initial_import(store, ListSource(nameless))
+    assert store.authority_names() == {}
+    assert [code for code, _ in store.authorities_without_names()] == [9001]
+
+    assert resolve_authority_names(store, ListSource(with_names)) == 1
+    assert store.authority_names() == {9001: "Demo Borough (synthetic)"}
+    assert store.authorities_without_names() == []
+
+    manifest = build_dataset(store, tmp_path, fetch_holidays=False)
+    assert manifest["authorities"][0]["name"] == "Demo Borough (synthetic)"
+    tile_path = next((tmp_path / "tiles").rglob("*.json"))
+    assert json.loads(tile_path.read_text())["features"][0]["auth"] == "Demo Borough (synthetic)"
+
+
+def test_unnamed_authority_is_labelled_by_code(store, tmp_path):
+    from locis_pipeline.tiles import build_dataset
+
+    initial_import(store, ListSource([dict(r, traName=None) for r in demo_records()[:1]]))
+    manifest = build_dataset(store, tmp_path, fetch_holidays=False)
+    assert manifest["authorities"][0]["name"] == "Authority 9001"

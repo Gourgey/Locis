@@ -35,6 +35,8 @@ public struct ParkingRulesEngine: Sendable {
         var inferred = false
         var shared = false
         var partial = false
+        /// Nothing recorded for the kerb exists at this time.
+        var empty = false
     }
 
     // MARK: Public API
@@ -108,8 +110,11 @@ public struct ParkingRulesEngine: Sendable {
         }
         func touchesPartial(_ ids: [String]) -> Bool { ids.contains(where: partialIDs.contains) }
 
-        // 2. An explicit prohibition is never hidden by a parking place.
-        let prohibiting = snapshots.filter { $0.effect == .prohibits }
+        // 2. An explicit prohibition is never hidden by a parking place. That
+        //    includes one whose exemption looks to have been published inside out.
+        let prohibiting = snapshots.filter {
+            $0.effect == .prohibits || ($0.effect == .notAffected && Self.exemptionLooksInverted($0.feature))
+        }
         if let first = prohibiting.first {
             let deciding = prohibiting.map(\.feature.id)
             return SegmentOutcome(
@@ -180,7 +185,8 @@ public struct ParkingRulesEngine: Sendable {
                         snapshots.isEmpty
                             ? "No rule recorded for this kerb is in force at this time"
                             : "No rule about waiting is recorded for this kerb"
-                    ])
+                    ],
+                    empty: snapshots.isEmpty)
             }
         } else {
             let specialist = inForce.filter { $0.feature.cat.isSpecialist }
@@ -249,6 +255,35 @@ public struct ParkingRulesEngine: Sendable {
         }
         outcome.partial = touchesPartial(outcome.deciding)
         return outcome
+    }
+
+    /// Whether a restriction that the data says does not apply to this user was
+    /// probably published the wrong way round.
+    ///
+    /// DfT's rule is that a condition describes who a restriction applies to, with
+    /// exemptions written as negations. Real records exist that do the opposite:
+    /// "No stopping except buses" published with the plain condition "bus". Read
+    /// literally that restricts only buses. Treating it as a restriction on
+    /// everyone can only make the app stricter, never more permissive, so it is
+    /// done when the record has no negation anywhere and either describes itself
+    /// with "except", or names only service vehicles, which nobody restricts alone.
+    static func exemptionLooksInverted(_ feature: Feature) -> Bool {
+        guard feature.role == .prohibition else { return false }
+        let nodes = feature.cond.allNodes
+        if nodes.contains(where: { if case .not = $0.kind { true } else { false } }) { return false }
+        if feature.desc.range(of: #"\bexcept"#, options: [.regularExpression, .caseInsensitive]) != nil { return true }
+        let serviceVehicles: Set<String> = ["bus", "taxi", "ambulance", "lightRailTram"]
+        var types: [String] = []
+        for node in nodes {
+            switch node.kind {
+            case .and, .or, .xor, .time, .concessions: continue
+            case .vehicle(let vehicle):
+                guard let type = vehicle.type, vehicle.usage == nil, vehicle.fuel == nil, vehicle.unsupported == nil else { return false }
+                types.append(type)
+            default: return false
+            }
+        }
+        return !types.isEmpty && types.allSatisfy(serviceVehicles.contains)
     }
 
     private static func prohibitionNote(_ feature: Feature) -> String {
@@ -361,6 +396,9 @@ public struct ParkingRulesEngine: Sendable {
         if !(feature.partial ?? []).isEmpty {
             confidenceNotes.append("Another rule covers part of this section; its exact extent may differ on the street")
         }
+        if all.contains(where: { $0.hasIssue("exemptionList") }) {
+            confidenceNotes.append("Published with a list of exemptions, which the app does not apply")
+        }
         if all.contains(where: { $0.hasIssue("legacyConditionNesting") }) {
             confidenceNotes.append("Published in an older data format whose conditions can be ambiguous")
         }
@@ -401,7 +439,8 @@ public struct ParkingRulesEngine: Sendable {
             limits: limits,
             applicableRuleIDs: applicable,
             unresolvedConditions: (unknowns.sorted() + needs.map(\.text).sorted()),
-            segments: segments)
+            segments: segments,
+            noRuleInForce: !parts.isEmpty && parts.allSatisfy(\.1.empty))
     }
 
     private func unknownEvaluation(_ feature: Feature, reason: String) -> ParkingEvaluation {
@@ -409,7 +448,7 @@ public struct ParkingRulesEngine: Sendable {
             featureID: feature.id, status: .unknown, confidence: .unknown, category: feature.cat,
             summary: reason, reasons: [reason], confidenceNotes: [], paymentRequired: false,
             chargeableSeconds: 0, estimatedCost: nil, costNote: nil, limits: StayLimits(),
-            applicableRuleIDs: [feature.id], unresolvedConditions: [reason], segments: [])
+            applicableRuleIDs: [feature.id], unresolvedConditions: [reason], segments: [], noRuleInForce: false)
     }
 
     private static func geometryNote(_ quality: GeometryQuality) -> String {

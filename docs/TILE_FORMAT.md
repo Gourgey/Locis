@@ -31,10 +31,16 @@ URL never changes its content and can be cached forever.
 
 ## Tile
 
-`{"v": 1, "z": 15, "x": 16358, "y": 10906, "features": [Feature, ...]}`
+`{"v": 1, "z": 15, "x": 16358, "y": 10906, "features": [Feature, ...], "context": [Feature, ...]}`
 
-A tile holds every feature whose geometry touches it, plus every feature those are
-evaluated against (`related`, `zones`).
+`features` holds every feature whose geometry touches the tile: these are drawn.
+`context` holds features from neighbouring tiles that those are evaluated against
+(`related`, `zones`): the app uses them for evaluation but does not draw them from
+this tile. An app that ignored `context` would find related rules missing and show
+those kerbs as unknown, which is the safe failure.
+
+Orders whose every time condition has already ended are left out of the tiles
+(`counts.expiredOmitted` in the manifest says how many).
 
 ## Feature
 
@@ -57,7 +63,7 @@ One regulated place of one D-TRO provision.
 | `cond` | Condition tree (below) |
 | `geom` | `{"type": "line"|"polygon"|"point", "coords": ...}` in WGS84, longitude first |
 | `geomQuality` | `kerb`, `centreline`, `zoneLine`, `area`, `point` |
-| `issues` | Data-quality flags: `dynamic`, `placeholder`, `timeZone`, `unsupportedCondition`, `legacyConditionNesting`, `oversized` |
+| `issues` | Data-quality flags: `dynamic`, `placeholder`, `timeZone`, `unsupportedCondition`, `legacyConditionNesting`, `exemptionList`, `oversized` |
 | `related`, `partial`, `zones` | Ids of overlapping provisions, the subset that overlap only partly, and containing zones |
 | `updated`, `published`, `schema` | Source timestamps and schema version |
 
@@ -73,14 +79,19 @@ which the regulation's effect applies.
 {"op": "and" | "or" | "xor", "items": [node, ...]}
 {"not": node}
 {"time": {"start", "end"?, "valid": [period], "except": [period], "maxStay"?, "noReturn"?}}
-{"vehicle": {"type"?, "usage"?, "unsupported"?: [...]}}
+{"vehicle": {"type"?, "usage"?, "fuel"?: [...], "unsupported"?: [...]}}
 {"permit": {"type", "scheme"?, ...}}
 {"driver": "disabledWithPermit" | ...}
 {"occupant": {"disabled"?: bool, "count"?: [...]}}
 {"access": [...]}   {"road": "..."}   {"nonVehicular": "..."}
 {"other": "free text"}
+{"concessions": [node, ...]}
 {"unsupported": "reason"}
 ```
+
+`concessions` is a published list of exemptions (see "Exemption lists" in
+[DTRO.md](DTRO.md)). It is always true: it does not narrow who a rule applies to,
+and its contents are shown as information only.
 
 Any node may also carry `rate` (a tariff charged while the node holds) or
 `rateUnusable`.

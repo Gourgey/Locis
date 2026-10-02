@@ -121,6 +121,7 @@ GitHub repository secrets, enable the scheduled workflow, and set
 | `locis update` | `sync` if a checkpoint exists, otherwise `import` |
 | `locis build` | Write manifest and tiles from the local store |
 | `locis publish` | `update`, then `build` |
+| `locis authorities` | Look up names for authorities known only by code |
 | `locis reparse` | Re-run the parser over stored raw records (after a parser fix) |
 | `locis status` | Show record counts and checkpoints |
 | `locis inspect-extract` | Download the bulk extract and show its layout |
@@ -140,6 +141,16 @@ GitHub repository secrets, enable the scheduled workflow, and set
 
 The database schema is created and upgraded automatically by versioned migrations in
 `pipeline/src/locis_pipeline/store.py`.
+
+### Viewing real data in the Simulator
+
+Debug builds can read tiles straight from the pipeline's output folder, without
+publishing them:
+
+```bash
+SIMCTL_CHILD_LOCIS_DATA_DIR="$PWD/pipeline/dist" SIMCTL_CHILD_LOCIS_START="51.6145,-0.1755" \
+    xcrun simctl launch "iPhone 17 Pro" studio.curateddesign.Locis
+```
 
 ## What you need to supply later
 

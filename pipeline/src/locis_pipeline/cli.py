@@ -6,6 +6,7 @@
     locis update           sync if a checkpoint exists, otherwise import
     locis build            write manifest + tiles from the store
     locis publish          update, then build (what the scheduled job runs)
+    locis authorities      look up names for authorities known only by code
     locis reparse          re-run the parser over stored raw payloads
     locis status           show store counts and checkpoints
     locis inspect-extract  download the bulk extract and show its layout
@@ -24,7 +25,7 @@ from .config import Settings, load_settings
 from .demo import DemoDTROSource
 from .geo import ensure_ostn15
 from .dtro_client import DTROSource, FixtureDTROSource, LiveDTROSource, iter_extract
-from .ingest import STATE_LAST_SYNC, incremental_sync, initial_import
+from .ingest import STATE_LAST_SYNC, incremental_sync, initial_import, resolve_authority_names
 from .store import Store
 from .tiles import build_dataset
 
@@ -145,7 +146,17 @@ def cmd_inspect_extract(args, settings: Settings) -> int:
     return 0
 
 
+def cmd_authorities(args, settings: Settings) -> int:
+    """Look up names for authorities known only by code."""
+    source = _source(settings)
+    store = Store(settings.db_path)
+    found = resolve_authority_names(store, source)
+    _print({"namesFound": found, "stillUnnamed": len(store.authorities_without_names())})
+    return 0
+
+
 COMMANDS = {
+    "authorities": cmd_authorities,
     "demo": cmd_demo,
     "import": cmd_import,
     "sync": cmd_sync,

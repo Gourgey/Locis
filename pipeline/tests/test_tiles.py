@@ -121,3 +121,32 @@ def test_bank_holiday_calendar():
     block = bank_holidays(date(2026, 10, 1), fetch=False)
     assert block["from"] == "2025-01-01" and block["to"] == "2028-12-31"
     assert "2026-04-03" in block["goodFridays"]
+
+
+def test_context_features_are_separate_from_drawn_features(store, tmp_path):
+    initial_import(store, DemoDTROSource())
+    manifest = build_dataset(store, tmp_path, zoom=20, fetch_holidays=False, today=date(2026, 10, 1))
+    # At zoom 20 a tile is about 24 m across, so some tiles hold part of a bay but need an
+    # overlapping rule that lies wholly in a neighbouring tile.
+    saw_context = False
+    for key, digest in manifest["tiles"].items():
+        x, y = key.split("/")
+        tile = json.loads((tmp_path / "tiles" / "20" / x / f"{y}-{digest}.json").read_text())
+        members = {f["id"] for f in tile["features"]}
+        context = {f["id"] for f in tile["context"]}
+        assert not members & context
+        for feature in tile["features"]:
+            for needed in feature.get("related", []) + feature.get("zones", []):
+                assert needed in members | context
+        saw_context = saw_context or bool(context)
+    assert saw_context
+
+
+def test_expired_orders_are_left_out_of_tiles(store, tmp_path):
+    initial_import(store, DemoDTROSource())
+    before = build_dataset(store, tmp_path / "a", fetch_holidays=False, generated_at="2026-10-01T00:00:00Z")
+    # Demo 12's temporary restriction ends on 30 June 2027.
+    after = build_dataset(store, tmp_path / "b", fetch_holidays=False, generated_at="2027-08-01T00:00:00Z")
+    assert before["counts"]["expiredOmitted"] == 0
+    assert after["counts"]["expiredOmitted"] == 1
+    assert after["counts"]["features"] == before["counts"]["features"] - 1

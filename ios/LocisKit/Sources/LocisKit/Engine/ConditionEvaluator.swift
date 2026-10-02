@@ -7,6 +7,8 @@ public enum EligibilityNeed: Hashable, Sendable {
     case guest
     /// A planned restriction that has not been made yet.
     case plannedRestriction
+    /// A bay for electric vehicles.
+    case electricVehicle
 
     public var text: String {
         switch self {
@@ -17,6 +19,7 @@ public enum EligibilityNeed: Hashable, Sendable {
         case .resident: return "For local residents"
         case .guest: return "For hotel guests"
         case .plannedRestriction: return "A temporary restriction is planned here"
+        case .electricVehicle: return "For electric vehicles only. Check the sign for charging and time limits"
         }
     }
 
@@ -134,6 +137,9 @@ struct ConditionEvaluator: Sendable {
             }
         case .unsupported(let why):
             return .unsupported([why])
+        case .concessions:
+            // A list of exemptions does not narrow who the rule applies to.
+            return .yes
         default:
             break
         }
@@ -158,6 +164,14 @@ struct ConditionEvaluator: Sendable {
         var parts: [Applicability] = []
         if let type = condition.type { parts.append(Self.matches(vehicleType: type, profile.vehicleType)) }
         if let usage = condition.usage { parts.append(Self.matches(vehicleUsage: usage)) }
+        if let fuel = condition.fuel, !fuel.isEmpty {
+            // The profile does not record fuel, so an electric-only condition is a
+            // question for the user; any other fuel condition is not interpreted.
+            let electric: Set<String> = ["electric", "battery", "phev", "reev", "fuelCell", "petrolBatteryHybrid", "dieselBatteryHybrid"]
+            parts.append(
+                fuel.allSatisfy(electric.contains)
+                    ? .eligibility([.electricVehicle]) : .unsupported(["a fuel-type condition (\(fuel.joined(separator: ", ")))"]))
+        }
         if let extra = condition.unsupported, !extra.isEmpty {
             parts.append(.unsupported(["vehicle characteristics (\(extra.map(Self.friendly).joined(separator: ", ")))"]))
         }

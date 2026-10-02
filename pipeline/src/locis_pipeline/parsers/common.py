@@ -14,6 +14,7 @@ docs/TILE_FORMAT.md). Its node kinds are:
     {"road": "<roadType>"}
     {"nonVehicular": "<type>"}
     {"other": "<free text>"}
+    {"concessions": [node, ...]}         an exemption list (see rewrite_exemption_lists)
     {"unsupported": "<reason>"}
 
 D-TRO boolean semantics are preserved exactly: a tree is true for the population
@@ -240,9 +241,12 @@ def normalise_vehicle(raw: Any) -> dict:
         vehicle["type"] = raw["vehicleType"]
     if "vehicleUsage" in raw:
         vehicle["usage"] = raw["vehicleUsage"]
-    extra = sorted(k for k in raw if k not in _VEHICLE_SUPPORTED)
+    if isinstance(raw.get("fuelType"), list) and raw["fuelType"] and "fuelTypeExtension" not in raw:
+        vehicle["fuel"] = [str(f) for f in raw["fuelType"]]
+    handled = _VEHICLE_SUPPORTED | ({"fuelType"} if "fuel" in vehicle else set())
+    extra = sorted(k for k in raw if k not in handled)
     if extra:
-        # Dimensions, weights, fuel, emissions, extensions...: not evaluated.
+        # Dimensions, weights, emissions, extensions...: not evaluated.
         vehicle["unsupported"] = extra
     return {"vehicle": vehicle}
 
@@ -407,3 +411,70 @@ def collect(node: dict, key: str) -> list:
 
 def normalise_date(value: Any) -> str | None:
     return parse_date(value) if value else None
+
+
+# --- exemption lists ----------------------------------------------------------------
+
+_EVERY_VEHICLE_NEGATED = {"not": {"vehicle": {"type": "anyVehicle"}}}
+_LOADING = {"loadingAndUnloading", "passengerLoadingAndUnloading"}
+
+
+def _is_stay_limit_only(node: dict) -> bool:
+    """A time node that only carries a stay limit, with no hours, days or dates."""
+    time = node.get("time")
+    if not isinstance(time, dict) or time.get("except") or "end" in time:
+        return False
+    limit_keys = {"maxStay", "noReturn", "name"}
+    return all(set(period) <= limit_keys for period in time.get("valid") or [])
+
+
+def _is_concession(node: dict) -> bool:
+    """A Blue Badge or loading concession, optionally with its own stay limit."""
+    if node.get("occupant") == {"disabled": True} or node.get("driver") == "disabledWithPermit":
+        return True
+    if "access" in node and node["access"] and set(node["access"]) <= _LOADING:
+        return True
+    if node.get("op") == "and":
+        parts = [i for i in node["items"] if not _is_stay_limit_only(i)]
+        return len(parts) == 1 and _is_concession(parts[0])
+    return False
+
+
+def rewrite_exemption_lists(node: dict, role: str) -> tuple[dict, bool]:
+    """Recognise one publisher idiom and make it safe to evaluate.
+
+    Some software publishes, for example, "No waiting at any time" as::
+
+        AND(time, OR(NOT(anyVehicle), AND(Blue Badge, max 3h), AND(loading, max 40 min)))
+
+    ``NOT(anyVehicle)`` matches no vehicle at all, so read literally the regulation
+    would apply only to Blue Badge holders and to loaders, which is the opposite
+    of what the order says: the OR is a list of exemptions and concessions.
+
+    The whole OR is replaced with a ``concessions`` node, which the rules engine
+    treats as "applies to everyone" and shows as information. For a restriction
+    that is always the conservative reading. For a parking place it is done only
+    when every listed item is a Blue Badge or loading concession; anything else
+    (for example an electric-vehicle condition) is left exactly as published.
+
+    Returns (tree, whether anything was rewritten).
+    """
+    changed = False
+    if "items" in node:
+        items = []
+        for item in node["items"]:
+            rewritten, did = rewrite_exemption_lists(item, role)
+            items.append(rewritten)
+            changed = changed or did
+        node = dict(node, items=items)
+        if node.get("op") == "or" and _EVERY_VEHICLE_NEGATED in items:
+            others = [i for i in items if i != _EVERY_VEHICLE_NEGATED]
+            restrictive = role != "permission"
+            if others and (restrictive or all(_is_concession(i) for i in others)):
+                extra = {k: v for k, v in node.items() if k in ("rate", "rateUnusable")}
+                return {"concessions": others, **extra}, True
+    elif "not" in node:
+        rewritten, changed = rewrite_exemption_lists(node["not"], role)
+        node = dict(node)
+        node["not"] = rewritten
+    return node, changed

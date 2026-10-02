@@ -81,7 +81,24 @@ def initial_import(store: Store, source: DTROSource) -> IngestReport:
     store.set_state(STATE_LAST_IMPORT, started)
     store.set_state(STATE_LAST_SYNC, started)
     store.set_state(STATE_IMPORT_PROGRESS, "complete")
+    resolve_authority_names(store, source)
     return report
+
+
+def resolve_authority_names(store: Store, source: DTROSource, *, limit: int = 500) -> int:
+    """Look up the names of authorities known only by code. Best effort: a name
+    that cannot be fetched is tried again on the next run."""
+    found = 0
+    for code, sample_id in store.authorities_without_names()[:limit]:
+        try:
+            envelope = source.get_record(sample_id)
+        except Exception:
+            continue
+        name = (envelope or {}).get("traName")
+        if name:
+            store.set_authority_name(code, str(name))
+            found += 1
+    return found
 
 
 def incremental_sync(store: Store, source: DTROSource, *, now: str | None = None) -> IngestReport:
@@ -126,4 +143,5 @@ def incremental_sync(store: Store, source: DTROSource, *, now: str | None = None
 
     if report.failed == 0:
         store.set_state(STATE_LAST_SYNC, until)
+    resolve_authority_names(store, source)
     return report

@@ -24,9 +24,25 @@ Status at the time of writing:
 - **API v1.6.1** (14 September 2026). v1.6.0 added spatial search.
 - The regulations that would require authorities to publish to D-TRO had not been
   laid before Parliament according to DfT's repository README. **Coverage is
-  therefore partial and uneven.** Real London coverage has not been measured yet
-  because that needs credentials; `locis status` and the manifest's `authorities`
-  list show it once data is imported.
+  therefore partial and uneven.**
+
+### What is actually published (full import, 2 October 2026)
+
+- 146,202 records; the extract is a 537 MB CSV and imports in about four minutes.
+- 6,424 records contain parking provisions, giving 297,171 kerb features from 84
+  authorities. The rest are mostly road closures and other temporary orders.
+- By schema: 107,407 records are v3.5.1, 35,612 are v4.0.0, 2,631 are v3.5.0 and
+  552 are older versions that are stored but not interpreted.
+- **London: 51,112 features, almost all from two boroughs.** Barnet (25,881) and
+  Redbridge (17,265) are well covered. Lewisham, Bexley, Lambeth, Haringey,
+  Kingston, Sutton, Tower Hamlets and Greenwich have between 3 and 850 each. The
+  other boroughs have published nothing. The edges of Kent, Essex and Thurrock
+  fall inside the London bounding box.
+- No London record carries a usable tariff, so paid bays show "Tariff unavailable".
+- Largest coverage elsewhere: Kent, Oxfordshire, Leicester, Bournemouth
+  Christchurch and Poole, Nottingham, Nottinghamshire, Lincolnshire, Gloucestershire.
+
+Re-measure with `locis status` and the `authorities` list in the manifest.
 
 ## Licence
 
@@ -100,6 +116,38 @@ version is stored with `parse_status = unsupported` and publishes nothing.
 To add a version: write an adapter with `regulation()` and `condition_tree()`,
 register it, add fixtures and tests.
 
+### The bulk extract
+
+Columns: `Id, SchemaVersion, Created, LastUpdated, Data`. `Data` is the record's
+JSON. `Created` and `LastUpdated` are written month-first (`04/23/2026 14:30:00`).
+There is no authority name, only the numeric code inside the JSON, so names are
+looked up from `GET /dtros/{id}` (one request per authority) and kept in the
+`authorities` table. `locis authorities` repeats the lookup.
+
+### Exemption lists and inverted exemptions
+
+Two publishing habits in the real data contradict DfT's condition rule. Both would
+make a restriction look as if it did not apply to an ordinary car.
+
+1. **Exemption lists.** Kingston and Lambeth records attach exemptions as
+   `OR(NOT(anyVehicle), Blue Badge up to 3 hours, loading up to 40 minutes)`.
+   `NOT(anyVehicle)` matches nothing, so read literally "No waiting at any time"
+   would apply only to Blue Badge holders and loaders. `rewrite_exemption_lists`
+   replaces the OR with a `concessions` node, which is always true. On a
+   restriction this is always done. On a parking place it is done only when every
+   item is a Blue Badge or loading concession; anything else (an electric-vehicle
+   condition, say) is left as published. The feature is flagged `exemptionList`.
+   The concessions are displayed but not applied, so a Blue Badge holder sees the
+   stricter answer.
+2. **Inverted exemptions.** Barnet publishes "No stopping except buses" with the
+   plain condition `vehicleType: bus`, which literally restricts only buses. The
+   engine treats a restriction as applying to everyone when the data says it does
+   not apply to the user, the record contains no negation, and either its
+   description contains "except" or it names only service vehicles (bus, taxi,
+   ambulance, tram). See `exemptionLooksInverted`.
+
+Both readings can only make the app stricter.
+
 ## Which regulations are used
 
 `regulations.py` lists every parking-relevant `regulationType` with a role and
@@ -150,10 +198,11 @@ parser fix does not need a new download.
 
 ## Known limitations
 
-- **Extract layout unverified.** DfT documents the bulk extract as a .csv but not
-  its columns. `envelope_from_row` accepts the plausible layouts; run
-  `locis inspect-extract` on the first real download and adjust if needed.
-- **Coverage unknown** until measured with credentials.
+- **Coverage is thin.** See the figures above: two London boroughs are well
+  covered and most have published nothing.
+- **Off-list regulations** (free text, such as Barnet's "2 Wheel Parking" and
+  "Business permit holders only") cannot be interpreted and show as unknown.
+- **Invalid polygons** (88 records) are rejected, not repaired.
 - **Revocations are not linked** to what they revoke; the kerb goes unknown instead.
 - **Amendments are not linked** to what they amend. If an authority publishes an
   amendment as a new record and leaves the old one in place, both are read. The
@@ -165,8 +214,9 @@ parser fix does not need a new download.
   of a bay marks the whole bay. Conservative, and flagged in the details.
 - **Not interpreted, so shown as unknown:** week-of-month rules, dawn/dusk and
   externally defined periods, market/match/school/event days, named holidays,
-  dynamic regulations, placeholder TROs, vehicle dimension, weight, fuel and
-  emissions conditions, free-text conditions.
+  dynamic regulations (in practice most temporary orders published by notice),
+  placeholder TROs, vehicle dimension, weight and emissions conditions, fuel
+  conditions other than electric, free-text conditions.
 - **Bank holidays** are England and Wales only.
 - **Blue Badge concessions** on yellow lines and in paid bays vary by authority and
   are not applied. Only what the order encodes is used.

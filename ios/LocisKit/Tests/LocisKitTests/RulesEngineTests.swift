@@ -712,3 +712,101 @@ struct CalendarTests {
         #expect(Describe.schedule(node) == ["Mon\u{2013}Fri 08:30\u{2013}18:30", "Sat 08:30\u{2013}13:30"])
     }
 }
+
+@Suite("Publishing habits found in real data")
+struct RealWorldEncodingTests {
+    let hour = stay("2026-10-05 10:00", "2026-10-05 11:00")
+    let badge = VehicleProfile(blueBadge: true)
+
+    /// OR(NOT(any vehicle), Blue Badge up to 3 hours, loading up to 40 minutes),
+    /// as rewritten by the pipeline.
+    var concessions: JSON {
+        [
+            "concessions": [
+                allOf(["occupant": ["disabled": true]], ["time": ["start": "2020-01-01T00:00:00Z", "valid": [["maxStay": 10800]]]]),
+                allOf(["access": ["loadingAndUnloading"]], ["time": ["start": "2020-01-01T00:00:00Z", "maxStay": 2400]]),
+            ]
+        ]
+    }
+
+    @Test func noStoppingExceptBusesPublishedAsBusOnly() {
+        // Literally "applies to buses". The description says who it really exempts.
+        let stop = feature(
+            reg: "kerbsideNoStopping", role: "prohibition", cat: "noStopping", cond: allOf(always, vehicle("bus")),
+            ["desc": "No stopping except buses"])
+        #expect(evaluate(stop, hour).status == .prohibited)
+        #expect(evaluate(stop, hour).reasons.first == "No stopping")
+        // A service vehicle named with no description at all is treated the same.
+        let stand = feature(
+            reg: "nonOrderKerbsideBusStop", role: "prohibition", cat: "busStop", cond: allOf(always, vehicle("bus")),
+            ["desc": "Bus Stand"])
+        #expect(evaluate(stand, hour).status == .prohibited)
+        let rank = feature(reg: "kerbsideNoWaiting", role: "prohibition", cat: "noWaiting", cond: allOf(always, vehicle("taxi")))
+        #expect(evaluate(rank, hour).status == .prohibited)
+    }
+
+    @Test func genuineVehicleSpecificRestrictionIsNotTreatedAsInverted() {
+        // A lorry ban really does apply only to lorries: amber for a car, never red or green.
+        let lorryBan = noWaiting(cond: allOf(always, vehicle("heavyGoodsVehicle")), ["desc": "No waiting by heavy goods vehicles"])
+        #expect(evaluate(lorryBan, hour).status == .conditional)
+        // Correctly published exemptions (with a negation) are left as they are.
+        let correct = noWaiting(cond: allOf(always, not(vehicle("motorcycle"))), ["desc": "No waiting except motorcycles"])
+        #expect(evaluate(correct, hour).status == .prohibited)
+        #expect(evaluate(correct, hour, profile: VehicleProfile(vehicleType: .motorcycle)).status == .conditional)
+    }
+
+    @Test func restrictionWithAnExemptionListAppliesToEveryone() {
+        let yellow = noWaiting(cond: allOf(always, concessions), ["issues": ["exemptionList"]])
+        let result = evaluate(yellow, hour)
+        #expect(result.status == .prohibited)
+        #expect(result.confidence == .medium)
+        // The concessions are shown but not applied, even to a Blue Badge holder.
+        #expect(evaluate(yellow, hour, profile: badge).status == .prohibited)
+        let lines = Describe.eligibility(yellow.cond)
+        #expect(lines.contains("Concession recorded (not applied by the app): Blue Badge holders, up to 3 hours"))
+        #expect(lines.contains("Concession recorded (not applied by the app): loading and unloading, up to 40 minutes"))
+    }
+
+    @Test func bayWithAnExemptionListStaysUsable() {
+        let paid = paidBay(
+            cond: allOf(time([period(monSat, [("08:30", "18:30")], extra: ["maxStay": 14400])]), concessions),
+            ["issues": ["exemptionList"]])
+        let result = evaluate(paid, hour)
+        #expect(result.status == .allowedPaid)
+        // The concession's own stay limit must not replace the bay's.
+        #expect(result.limits.maxStay == 14400)
+        let permitBay = feature(
+            reg: "kerbsidePermitParkingPlace", cat: "permit", cond: allOf(time([period(monSat)]), permit(), concessions))
+        #expect(evaluate(permitBay, hour).status == .conditional)
+        let disabled = feature(
+            reg: "kerbsideDisabledBadgeHoldersOnly", cat: "disabled", cond: allOf(always, ["occupant": ["disabled": true]], concessions))
+        #expect(evaluate(disabled, hour).status == .specialist)
+        #expect(evaluate(disabled, hour, profile: badge).status == .allowedFree)
+    }
+
+    @Test func unreadableConcessionListIsUnknown() {
+        #expect(evaluate(noWaiting(cond: allOf(always, ["concessions": "oops"])), hour).status == .unknown)
+    }
+
+    @Test func electricVehicleBayIsConditionalNotAvailable() {
+        let electric = bay(cond: allOf(time([period(everyDay, extra: ["maxStay": 10800])]), ["vehicle": ["fuel": ["electric"]]]))
+        let result = evaluate(electric, hour)
+        #expect(result.status == .conditional)
+        #expect(result.reasons.first?.hasPrefix("For electric vehicles only") == true)
+        // A fuel condition the app does not understand is unknown.
+        let diesel = bay(cond: allOf(always, ["vehicle": ["fuel": ["diesel"]]]))
+        #expect(evaluate(diesel, hour).status == .unknown)
+        // A restriction that exempts electric vehicles still restricts everyone the app knows about.
+        let exceptElectric = noWaiting(cond: allOf(always, not(["vehicle": ["fuel": ["electric"]]])))
+        #expect(evaluate(exceptElectric, hour).status == .conditional)
+    }
+
+    @Test func kerbWithNoRuleInForceIsFlagged() {
+        let ended = noWaiting(cond: time(start: "2026-09-01T00:00:00Z", end: "2026-09-30T00:00:00Z"))
+        #expect(evaluate(ended, hour).noRuleInForce)
+        #expect(!evaluate(noWaiting(), hour).noRuleInForce)
+        // In force for only part of the stay: still drawn.
+        let starts = noWaiting(cond: time(start: "2026-10-05T09:30:00Z"))  // 10:30 in London
+        #expect(!evaluate(starts, hour).noRuleInForce)
+    }
+}
