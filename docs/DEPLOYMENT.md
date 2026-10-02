@@ -4,14 +4,15 @@ Two things are deployed: the **data** (static files) and the **app**.
 
 ## 1. Publish the data
 
-The workflow `.github/workflows/publish-data.yml` runs every Sunday at 03:17 UTC
-on GitHub's machines. It fetches the D-TRO data, rebuilds the tiles and publishes them
+The workflow `.github/workflows/publish-data.yml` runs on the 1st and 15th of each month
+at 03:17 UTC on GitHub's machines. It fetches the D-TRO data, rebuilds the tiles and publishes them
 to GitHub Pages. It can also be run by hand from the Actions tab.
 
-It is weekly while the app is unreleased. To make it daily, change the `cron` line to
-`"17 3 * * *"`. Daily matters for temporary restrictions: on the data of 2 October
-2026, about one in ten orders published ahead of time appeared less than a week
-before they started.
+About fortnightly was the owner's choice, to avoid running a job nobody benefits
+from. To change it, edit the `cron` line: `"17 3 * * 0"` is weekly and `"17 3 * * *"`
+daily. The cost of running less often is temporary restrictions: on the data of
+2 October 2026, about one in five orders published ahead of time appeared less than
+two weeks before they started, so roughly one in ten is missing on the day it starts.
 
 The phone is not involved in this. The app downloads data only when it is opened,
 only for the area on screen, and only tiles that changed since it last had them.
@@ -37,9 +38,10 @@ Netlify, an S3-compatible bucket). The app only needs HTTPS and the folder layou
 ### How the job keeps state
 
 The pipeline's SQLite database (raw records and the sync checkpoint) is saved in the
-Actions cache between runs, so most days only changes are fetched. If the cache has
-expired the job runs a full import. A full import also runs every Sunday to
-reconcile anything the event feed missed.
+Actions cache between runs, so a run started by hand only fetches changes. If the
+cache has expired (GitHub drops it after a week unused) the job runs a full import.
+Every scheduled run is a full import, which reconciles anything the event feed
+missed.
 
 A failed update never publishes: the previous data stays live.
 

@@ -5,8 +5,8 @@ name: Publish parking data
 
 on:
   schedule:
-    # Weekly until the app is released; "17 3 * * *" makes it daily again.
-    - cron: "17 3 * * 0" # every Sunday at 03:17 UTC
+    # About fortnightly. "17 3 * * 0" is weekly and "17 3 * * *" daily.
+    - cron: "17 3 1,15 * *" # the 1st and 15th of each month at 03:17 UTC
   workflow_dispatch:
     inputs:
       full:
@@ -76,9 +76,9 @@ jobs:
           LOCIS_DB: pipeline/var/locis.sqlite
           LOCIS_OUT: pipeline/dist
         run: |
-          # The scheduled Sunday run is a full import, which reconciles anything the
-          # event feed missed.
-          if [ "${{ inputs.full }}" = "true" ] || [ "$(date -u +%u)" = "7" ]; then
+          # A scheduled run is a full import, which reconciles anything the event
+          # feed missed.
+          if [ "${{ inputs.full }}" = "true" ] || [ "${{ github.event_name }}" = "schedule" ]; then
             locis publish --full
           else
             locis publish
