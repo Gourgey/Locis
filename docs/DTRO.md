@@ -203,6 +203,9 @@ parser fix does not need a new download.
 - **Off-list regulations** (free text, such as Barnet's "2 Wheel Parking" and
   "Business permit holders only") cannot be interpreted and show as unknown.
 - **Invalid polygons** (88 records) are rejected, not repaired.
+- **Coarse geometry.** Redbridge publishes every line as two points, start and end.
+  On a curved road the drawn line cuts the corner and can cross a block. The rule
+  is still attached to the right street, but the line is not the kerb.
 - **Revocations are not linked** to what they revoke; the kerb goes unknown instead.
 - **Amendments are not linked** to what they amend. If an authority publishes an
   amendment as a new record and leaves the old one in place, both are read. The

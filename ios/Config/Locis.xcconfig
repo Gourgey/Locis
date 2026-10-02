@@ -10,7 +10,7 @@ LOCIS_DISPLAY_NAME = Locis
 //
 // xcconfig files treat // as a comment, so write the slashes as /$()/ :
 //   LOCIS_DATA_BASE_URL = https:/$()/example.github.io/locis-data
-LOCIS_DATA_BASE_URL =
+LOCIS_DATA_BASE_URL = https:/$()/gourgey.github.io/Locis
 
 // Privacy policy shown in Settings and required for the App Store listing.
 LOCIS_PRIVACY_POLICY_URL =

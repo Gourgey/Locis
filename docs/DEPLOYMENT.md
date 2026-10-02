@@ -22,6 +22,8 @@ only for the area on screen, and only tiles that changed since it last had them.
 5. Note the Pages URL it prints, for example `https://<user>.github.io/<repo>/`.
    `https://<user>.github.io/<repo>/manifest.json` should open in a browser.
 
+This project's data is published at <https://gourgey.github.io/Locis/>.
+
 GitHub Pages is free for public repositories. For a private repository it needs a
 paid plan; the alternatives are to make the repository public (it contains no
 secrets), or to upload `pipeline/dist` to any static host (Cloudflare Pages,
@@ -52,8 +54,8 @@ Checked against GitHub's documentation on 1 October 2026.
   60 days without repository activity. The job re-enables itself on every run to
   reset that timer; if it is ever disabled anyway, press "Enable workflow" on the
   Actions tab.
-- **How long the job takes on real data is not yet measured.** Check the first few
-  runs on the Actions tab.
+- **Measured:** the first full run (2 October 2026: download, import of 146,202
+  records, tile build, deploy) took about two minutes.
 
 ### Running it yourself instead
 
