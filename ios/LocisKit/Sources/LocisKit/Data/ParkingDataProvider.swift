@@ -58,6 +58,8 @@ public struct LoadedArea: Sendable {
     /// Requested tiles for which the dataset has no data at all.
     public var emptyTiles: Set<TileCoordinate> = []
     public var tileOfFeature: [String: Set<TileCoordinate>] = [:]
+    /// How many kerb rules (zones excluded) each loaded tile holds.
+    public var ruleCount: [TileCoordinate: Int] = [:]
 
     public init() {}
 }
@@ -133,6 +135,7 @@ public struct DemoDataProvider: ParkingDataProviding {
 extension LoadedArea {
     mutating func add(_ tile: Tile, at coordinate: TileCoordinate) {
         if tile.undecodable > 0 { incompleteTiles.insert(coordinate) }
+        ruleCount[coordinate] = tile.features.count { $0.role != .zone }
         for feature in tile.features {
             features[feature.id] = feature
             memberIDs.insert(feature.id)
@@ -150,6 +153,7 @@ extension LoadedArea {
         incompleteTiles.formUnion(other.incompleteTiles)
         emptyTiles.formUnion(other.emptyTiles)
         for (id, tiles) in other.tileOfFeature { tileOfFeature[id, default: []].formUnion(tiles) }
+        ruleCount.merge(other.ruleCount) { _, new in new }
     }
 
     /// True when a rule for this feature's area may be missing.

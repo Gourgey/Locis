@@ -129,6 +129,48 @@ struct MapModelTests {
         #expect(model.notice == .noDataHere)
         #expect(model.items.isEmpty)
         #expect(model.notice?.message == "No reliable parking data is available here yet.")
+        #expect(model.coverage == .unknown)
+    }
+
+    @Test func kerbsWithNoLineAreOnlyExplainedWhereDataIsDense() {
+        typealias Model = ParkingMapModel
+        let a = TileCoordinate(x: 1, y: 1, z: 15)
+        let b = TileCoordinate(x: 2, y: 1, z: 15)
+        let dense = Model.denseRulesPerTile
+        // Plenty of rules in every visible tile.
+        #expect(Model.coverage(of: [a, b], published: [a.key, b.key], ruleCount: [a: dense * 3, b: dense]) == .dense)
+        // A handful of orders is not a published network.
+        #expect(Model.coverage(of: [a, b], published: [a.key, b.key], ruleCount: [a: 6, b: 3]) == .sparse)
+        #expect(Model.coverage(of: [a], published: [a.key], ruleCount: [a: dense - 1]) == .sparse)
+        // A neighbouring tile with nothing published: the area is not covered.
+        #expect(Model.coverage(of: [a, b], published: [a.key], ruleCount: [a: dense * 10]) == .sparse)
+        // A published tile that has not loaded counts for nothing.
+        #expect(Model.coverage(of: [a, b], published: [a.key, b.key], ruleCount: [a: dense * 2 - 1]) == .sparse)
+        #expect(Model.coverage(of: [a], published: [], ruleCount: [:]) == .unknown)
+        #expect(Model.coverage(of: [], published: [a.key], ruleCount: [a: dense]) == .unknown)
+        // The wording never calls an unmarked kerb free.
+        for coverage in [Model.Coverage.unknown, .sparse, .dense] {
+            #expect(!coverage.unmarkedKerbMessage.localizedCaseInsensitiveContains("free to park"))
+            #expect(!coverage.unmarkedKerbMessage.localizedCaseInsensitiveContains("you can park"))
+        }
+        #expect(Model.Coverage.dense.unmarkedKerbMessage.contains("Check signs"))
+        #expect(Model.Coverage.sparse.unmarkedKerbMessage == "No line means no data, not free parking.")
+    }
+
+    @Test func coverageIsWithdrawnWhenDataCannotBeShown() async {
+        let provider = ScriptedProvider()
+        let (model, _) = makeModel(provider)
+        model.viewportChanged(quarter)
+        await model.settle()
+        #expect(model.coverage != .unknown)
+        model.viewportChanged(BoundingBox(west: -0.5, south: 51.3, east: 0.3, north: 51.7))
+        await model.settle()
+        #expect(model.coverage == .unknown)
+        await provider.set(failTiles: true)
+        model.refresh()
+        model.viewportChanged(quarter)
+        await model.settle()
+        #expect(model.coverage == .unknown)
     }
 
     @Test func zoomedOutMapAsksToZoomIn() async {

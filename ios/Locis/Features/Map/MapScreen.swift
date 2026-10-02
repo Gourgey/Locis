@@ -45,6 +45,8 @@ struct MapScreen: View {
                         NoticePill(text: notice.message, isLoading: false)
                     } else if model.phase == .loading || model.isEvaluating {
                         NoticePill(text: "Loading parking rules", isLoading: true)
+                    } else if model.coverage == .dense {
+                        NoticePill(text: model.coverage.unmarkedKerbMessage, isLoading: false)
                     }
                 }
                 Spacer(minLength: 0)
@@ -55,7 +57,7 @@ struct MapScreen: View {
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if !searchFocused {
                 HStack(alignment: .bottom) {
-                    LegendButton(isExpanded: $showingLegend)
+                    LegendButton(isExpanded: $showingLegend, coverage: model.coverage)
                     Spacer()
                     VStack(spacing: 10) {
                         MapButton(symbol: "gearshape", label: "Settings") { showingSettings = true }
@@ -228,7 +230,7 @@ struct FilterMenu: View {
                 }
             }
             Section {
-                Text("Filters only hide lines. Roads with no line have no data, not free parking.")
+                Text("Filters only hide lines. A road with no line is never confirmed as free parking.")
             }
         } label: {
             HStack(spacing: 6) {

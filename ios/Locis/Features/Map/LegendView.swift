@@ -4,6 +4,7 @@ import SwiftUI
 /// A compact legend that expands to explain each colour.
 struct LegendButton: View {
     @Binding var isExpanded: Bool
+    var coverage: ParkingMapModel.Coverage = .unknown
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -20,7 +21,7 @@ struct LegendButton: View {
                     .accessibilityElement(children: .combine)
                 }
                 Divider()
-                Text("Dashed lines: lower confidence.\nNo line means no data, not free parking.")
+                Text("Dashed lines: lower confidence.\n\(coverage.unmarkedKerbMessage)")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

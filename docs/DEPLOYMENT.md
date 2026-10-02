@@ -4,9 +4,14 @@ Two things are deployed: the **data** (static files) and the **app**.
 
 ## 1. Publish the data
 
-The workflow `.github/workflows/publish-data.yml` runs every day at 03:17 UTC on
-GitHub's machines. It fetches D-TRO changes, rebuilds the tiles and publishes them to
-GitHub Pages. It can also be run by hand from the Actions tab.
+The workflow `.github/workflows/publish-data.yml` runs every Sunday at 03:17 UTC
+on GitHub's machines. It fetches the D-TRO data, rebuilds the tiles and publishes them
+to GitHub Pages. It can also be run by hand from the Actions tab.
+
+It is weekly while the app is unreleased. To make it daily, change the `cron` line to
+`"17 3 * * *"`. Daily matters for temporary restrictions: on the data of 2 October
+2026, about one in ten orders published ahead of time appeared less than a week
+before they started.
 
 The phone is not involved in this. The app downloads data only when it is opened,
 only for the area on screen, and only tiles that changed since it last had them.
@@ -43,7 +48,7 @@ A failed update never publishes: the previous data stays live.
 Checked against GitHub's documentation on 1 October 2026.
 
 - **Public repository:** standard runners are free with no minute limit.
-- **Private repository:** 2,000 minutes a month are included. The daily data job
+- **Private repository:** 2,000 minutes a month are included. The data job
   runs on Linux and should use a small fraction of that. The macOS job in
   `ci.yml` is billed at about ten times the Linux rate, so in a private repository
   remove it or run it only by hand.

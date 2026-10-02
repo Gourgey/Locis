@@ -47,7 +47,7 @@ Docker is not needed.
 ## Run it
 
 The app downloads live parking data from <https://gourgey.github.io/Locis/>, which a
-scheduled job republishes every day (see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)).
+scheduled job republishes every week (see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)).
 
 For development without that data, empty `LOCIS_DATA_BASE_URL` in
 `ios/Config/Locis.xcconfig` (or override it in `ios/Config/Local.xcconfig`). The app

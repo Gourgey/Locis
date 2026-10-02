@@ -96,10 +96,32 @@ public final class ParkingMapModel {
         }
     }
 
+    /// How fully the streets on screen appear to have been published. This only
+    /// changes the wording shown about kerbs with no line: such a kerb is never
+    /// given a status, however complete the data looks.
+    public enum Coverage: Equatable, Sendable {
+        /// Nothing loaded, or part of the area is missing.
+        case unknown
+        /// Some rules are published here, too few to say anything about the rest.
+        case sparse
+        /// Rules are published densely enough that a kerb with no line most
+        /// likely has no traffic order.
+        case dense
+
+        /// What a kerb with no line means, in words.
+        public var unmarkedKerbMessage: String {
+            switch self {
+            case .dense: "No line: no restriction recorded. Check signs."
+            case .unknown, .sparse: "No line means no data, not free parking."
+            }
+        }
+    }
+
     // MARK: State
 
     public private(set) var phase: Phase = .idle
     public private(set) var notice: Notice?
+    public private(set) var coverage: Coverage = .unknown
     public private(set) var items: [MapItem] = [] {
         didSet { itemsRevision += 1 }
     }
@@ -131,6 +153,10 @@ public final class ParkingMapModel {
     /// How far beyond the screen kerbs are evaluated and drawn, as a fraction of its size.
     static let evaluationMargin = 0.3
     static let maximumTilesPerRequest = 30
+    /// Average kerb rules per visible tile from which the area counts as densely
+    /// published. Councils that have published their whole network average around
+    /// a hundred per tile; ones that have published a handful of orders, under ten.
+    nonisolated static let denseRulesPerTile = 40
     static let maximumLoadedTiles = 120
 
     private let provider: ParkingDataProviding
@@ -185,6 +211,7 @@ public final class ParkingMapModel {
         guard box.heightDegrees <= Self.maximumSpanDegrees else {
             phase = .zoomedOut
             notice = .zoomIn
+            coverage = .unknown
             items = []
             zones = []
             return
@@ -212,6 +239,7 @@ public final class ParkingMapModel {
         guard state.isCompatible else {
             phase = .failed(.requiresAppUpdate)
             notice = .requiresAppUpdate
+            coverage = .unknown
             items = []
             zones = []
             return
@@ -222,6 +250,7 @@ public final class ParkingMapModel {
         guard wanted.count <= Self.maximumTilesPerRequest else {
             phase = .zoomedOut
             notice = .zoomIn
+            coverage = .unknown
             items = []
             zones = []
             return
@@ -257,8 +286,25 @@ public final class ParkingMapModel {
         } else {
             notice = nil
         }
+        coverage =
+            failedHere
+            ? .unknown
+            : Self.coverage(of: visible, published: Set(state.manifest.tiles.keys), ruleCount: area.ruleCount)
         scheduleEvaluation()
         await evaluationTask?.value
+    }
+
+    /// Judges how fully the visible tiles are published. Dense only when every
+    /// one of them has data and they hold plenty of rules between them, so the
+    /// edge of a council that has published nothing does not count.
+    nonisolated static func coverage(
+        of visible: Set<TileCoordinate>, published: Set<String>, ruleCount: [TileCoordinate: Int]
+    ) -> Coverage {
+        let withData = visible.filter { published.contains($0.key) }
+        guard !withData.isEmpty else { return .unknown }
+        guard withData.count == visible.count else { return .sparse }
+        let rules = withData.reduce(0) { $0 + (ruleCount[$1] ?? 0) }
+        return rules >= denseRulesPerTile * visible.count ? .dense : .sparse
     }
 
     private func fail(_ error: ParkingDataError) {
@@ -268,6 +314,7 @@ public final class ParkingMapModel {
         case .unavailable: notice = .temporarilyUnavailable
         case .requiresAppUpdate: notice = .requiresAppUpdate
         }
+        coverage = .unknown
         items = []
         zones = []
     }

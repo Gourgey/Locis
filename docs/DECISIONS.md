@@ -58,3 +58,18 @@ exclude users for no gain.
 live on 29 May 2026, so much published data is likely to be v3.5.x. A second
 adapter reads it. Its sibling-nested condition sets were described by DfT as
 ambiguous, so those features are flagged and capped at medium confidence.
+
+## 5. Kerbs with no line get a note, never a colour
+
+A council only makes a traffic order where it restricts something, so an ordinary
+unrestricted kerb has no record. In the data that looks exactly like a kerb whose
+orders have not been published, and the app cannot tell the two apart.
+
+**Decision:** such a kerb is never drawn and never given a status. Where every
+map tile on screen has data and they average at least 40 kerb rules each
+(`ParkingMapModel.denseRulesPerTile`), the map shows "No line: no restriction
+recorded. Check signs." Elsewhere the key keeps "No line means no data, not free
+parking." Measured on live data, councils that have published their whole network
+(Barnet, Redbridge) have a median of about 100 rules per tile; those that have
+published a handful of orders have under 10. The note is text only: it changes
+no evaluation.
